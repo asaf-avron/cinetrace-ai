@@ -1,0 +1,32 @@
+[project]
+name = "cinetrace"
+version = "0.1.0"
+description = "CineTrace AI — VFX studio supervisor that kills render-farm compute waste"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "google-cloud-aiplatform[agent_engines,adk]>=1.101.0",
+    "google-adk>=1.16.0",
+    "clickhouse-connect>=0.8.0",
+    "python-dotenv>=1.0.0",
+    "mcp-clickhouse>=0.1.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "httpx>=0.27.0"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cinetrace = ["schema/*.sql", "web/static/*", "web/templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

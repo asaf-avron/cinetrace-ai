@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CineTrace AI — Studio Supervisor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">CineTrace AI</p>
+      <h1>VFX farm supervisor</h1>
+    </div>
+    <p class="meta">Diagnostic Sentinel · Studio Orchestrator · Action Agent · ClickHouse via MCP</p>
+  </header>
+
+  <section class="toolbar">
+    <label class="token">
+      Demo token
+      <input id="token" type="password" autocomplete="off" />
+    </label>
+    <button id="run" type="button">Run supervisor</button>
+    <span id="status">Idle — page is public; Run spends Vertex credits and needs a token</span>
+  </section>
+
+  <section>
+    <h2>Render jobs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>job</th><th>show / shot</th><th>status</th><th>error</th>
+            <th>retries</th><th>queue s</th><th>cpu h</th><th>gpu h</th><th>frames</th>
+          </tr>
+        </thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Remediation proposals</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>when</th><th>job</th><th>action</th><th>status</th>
+            <th>mode</th><th>executed</th><th>reason / outcome</th>
+          </tr>
+        </thead>
+        <tbody id="proposals"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Last run</h2>
+    <pre id="summary">No supervisor run in this session.</pre>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
