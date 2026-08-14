@@ -1,0 +1,26 @@
+---
+description: CineTrace AI product and hackathon constraints for every session
+alwaysApply: true
+---
+
+# CineTrace AI
+
+Product is **CineTrace AI**: a VFX studio supervisor that kills render-farm compute waste by analyzing telemetry.
+
+Only these agents exist. Do not invent extra agent roles:
+
+- **Diagnostic Sentinel** — detect waste / anomalies in farm telemetry
+- **Studio Orchestrator** — decide what to do next
+- **Action Agent** — execute the remediation
+
+ClickHouse is the telemetry store. Agents talk to it through **MCP**. Use real queries, not mocked “as if” ClickHouse.
+
+Stack constraint: **Gemini + Google Cloud Agent Builder / ADK / Agent Engine**. Do not substitute another orchestrator as the submission core.
+
+Devpost ClickHouse track: Google Cloud and ClickHouse must be **imported and called in code**, not only named in the README.
+
+No secrets in git. Use env files (gitignored) or Secret Manager.
+
+This repo stays **private** until pre-submit. Do not add or commit an OSS license unless asked.
+
+Do not pull Milepo, Paperclip, or Oracle conventions into this repo.
