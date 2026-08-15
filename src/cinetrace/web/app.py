@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from cinetrace.clickhouse.client import credentials_ready
 from cinetrace.clickhouse.impact import fetch_impact
 from cinetrace.clickhouse.proposals import list_jobs, list_proposals
+from cinetrace.clickhouse.queries import fetch_waste_showcase
 from cinetrace.env import load_env
 from cinetrace.web.guard import HourlyLimiter, extract_token, run_enabled, token_ok
 from cinetrace.web.runner import DEFAULT_PROMPT, run_supervisor
@@ -63,6 +64,13 @@ def api_impact() -> dict:
     return _jsonable_value(fetch_impact())
 
 
+@app.get("/api/waste")
+def api_waste() -> dict:
+    if not credentials_ready():
+        raise HTTPException(503, "ClickHouse credentials are not set")
+    return _jsonable_value(fetch_waste_showcase())
+
+
 @app.post("/api/run")
 async def api_run(
     body: RunRequest | None = None,
@@ -85,6 +93,7 @@ async def api_run(
         "jobs": _jsonable(list_jobs()),
         "proposals": _jsonable(list_proposals()),
         "impact": _jsonable_value(fetch_impact()),
+        "waste": _jsonable_value(fetch_waste_showcase()),
     }
 
 

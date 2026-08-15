@@ -14,8 +14,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 "IBM Plex Mono", ui-monospace, monospace; }
-header, section, .toolbar { max-width: 1280px; margin: 0 auto; padding: 16px 20px; }
-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); }
+body > header, section, .toolbar { max-width: 1280px; margin: 0 auto; padding: 16px 20px; }
+body > header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); }
 .eyebrow { margin: 0; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px; }
 h1 { margin: 4px 0 0; font-size: 22px; font-weight: 600; }
 h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -32,7 +32,29 @@ button {
 }
 button:disabled { opacity: 0.5; cursor: wait; }
 #status { color: var(--muted); }
-.dashboard { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.dashboard { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .dashboard { grid-template-columns: 1fr; } }
+.waste-lead, .panel-lead { margin: 0 0 12px; color: var(--muted); }
+.waste-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 720px) { .waste-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.waste-card {
+  display: block; text-decoration: none; color: inherit;
+  border: 1px solid var(--line); padding: 10px 8px; background: #0d1116;
+}
+.waste-card:hover { border-color: var(--accent); }
+.waste-count { margin: 0; font-size: 28px; font-weight: 600; line-height: 1; }
+.waste-label { margin: 6px 0 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.waste-card.failed .waste-count { color: var(--fail); }
+.waste-card.retry_loops .waste-count { color: #e89b4c; }
+.waste-card.idle_queue .waste-count { color: var(--queue); }
+.waste-card.zombies .waste-count { color: var(--run); }
+.waste-card.overruns .waste-count { color: var(--accent); }
+.query-panel { margin-bottom: 16px; background: var(--panel); border: 1px solid var(--line); }
+.query-panel header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.query-panel h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.query-count { color: var(--muted); font-size: 11px; }
+.query-sql { margin: 0; border: 0; border-bottom: 1px solid var(--line); min-height: 0; font-size: 12px; color: #9ecbff; }
+.query-panel .table-wrap { border: 0; }
 .card {
   background: var(--panel); border: 1px solid var(--line); padding: 16px 18px;
 }
