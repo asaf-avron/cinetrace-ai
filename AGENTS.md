@@ -21,3 +21,11 @@ Gemini + Google Cloud ADK / Agent Engine is the submission core. Do not substitu
 ## Secrets
 
 No secrets in git. Use the local `.env` (gitignored). Copy from `.env.example`. Fill `CLICKHOUSE_HOST` and `CLICKHOUSE_PASSWORD` from ClickHouse Cloud **Connect → HTTPS**, not the MCP tab.
+
+## Paperclip / Oracle
+
+Oracle and Paperclip are allowed **only** for company **CIN / CineTrace AI**. Do not operate on SYN/Maqom. Do not change `/opt/milepo-oracle` deploy defaults to CIN.
+
+Use `.cursor/skills/oracle-connection` for SSH/host facts and `.cursor/skills/paperclip-cin` for CIN issues/agents/heartbeats. Resolve the company at runtime with `issuePrefix == "CIN"`. Never use `companies[0]` and never source `paperclip-env.sh` without `PAPERCLIP_COMPANY_ISSUE_PREFIX=CIN`. Board tokens stay on the Oracle host (`.env`); do not commit them here.
+
+CIN host checkout is `/opt/cinetrace-ai` with per-agent worktrees under `worktrees/<slug>`. Do not use `/opt/milepo/worktrees`. GitHub access is the personal PAT in `/home/ubuntu/.cinetrace/github.env` (`GH_TOKEN=...`); never `gh auth login` with it (host `gh` stays `insiteu-bot`). See `paperclip-cin`.

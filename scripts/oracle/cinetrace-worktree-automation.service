@@ -1,0 +1,13 @@
+[Unit]
+Description=CIN Paperclip agent worktree ensure
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+Environment=CINETRACE_CLONE=/opt/cinetrace-ai
+Environment=CINETRACE_GITHUB_ENV=/home/ubuntu/.cinetrace/github.env
+Environment=PAPERCLIP_API_BASE=http://127.0.0.1:3100
+ExecStart=/home/ubuntu/.cinetrace/ensure-cin-worktrees.sh
+Nice=10
