@@ -3,6 +3,17 @@ const proposalsBody = document.getElementById("proposals");
 const summary = document.getElementById("summary");
 const status = document.getElementById("status");
 const runBtn = document.getElementById("run");
+const impactBefore = document.getElementById("impact-before");
+const impactAfter = document.getElementById("impact-after");
+const impactMeta = document.getElementById("impact-meta");
+const impactCats = document.getElementById("impact-cats");
+const impactNote = document.getElementById("impact-note");
+
+function money(value) {
+  const n = Number(value);
+  if (Number.isNaN(n)) return "—";
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 function cell(text) {
   const td = document.createElement("td");
@@ -48,18 +59,44 @@ function renderProposals(proposals) {
   }
 }
 
+function renderImpact(impact) {
+  if (!impact) return;
+  impactBefore.textContent = money(impact.before_usd);
+  impactAfter.textContent = money(impact.after_usd);
+  const gpu = Number(impact.waste_gpu_hours || 0).toFixed(1);
+  const cpu = Number(impact.waste_cpu_hours || 0).toFixed(1);
+  impactMeta.textContent =
+    `${gpu} GPU-h + ${cpu} CPU-h waste · ${impact.waste_job_count} of ${impact.job_count} jobs · ` +
+    `${money(impact.recovered_usd)} recovered by proposals`;
+  impactCats.replaceChildren();
+  for (const cat of impact.categories || []) {
+    const li = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = cat.category.replaceAll("_", " ");
+    li.append(label, document.createTextNode(` ${cat.job_count} · ${money(cat.waste_usd)}`));
+    impactCats.append(li);
+  }
+  const rate = impact.assumptions || {};
+  impactNote.textContent =
+    `Rates: $${Number(rate.gpu_hour_usd).toFixed(2)}/GPU-h · $${Number(rate.cpu_hour_usd).toFixed(2)}/CPU-h. ` +
+    `Overrun excess vs healthy completed hours/frame. Idle queue = reserved GPU-slot hours. Seed telemetry, not a quote.`;
+}
+
 async function refresh() {
-  const [jobsRes, propRes] = await Promise.all([
+  const [jobsRes, propRes, impactRes] = await Promise.all([
     fetch("/api/jobs"),
     fetch("/api/proposals"),
+    fetch("/api/impact"),
   ]);
-  if (!jobsRes.ok || !propRes.ok) {
+  if (!jobsRes.ok || !propRes.ok || !impactRes.ok) {
     throw new Error("ClickHouse API failed. Check .env and that the service is awake.");
   }
   const jobs = await jobsRes.json();
   const proposals = await propRes.json();
+  const impact = await impactRes.json();
   renderJobs(jobs.jobs);
   renderProposals(proposals.proposals);
+  renderImpact(impact);
 }
 
 runBtn.addEventListener("click", async () => {
@@ -80,6 +117,7 @@ runBtn.addEventListener("click", async () => {
     summary.textContent = data.summary || "Run finished with no text.";
     renderJobs(data.jobs);
     renderProposals(data.proposals);
+    renderImpact(data.impact);
     status.textContent = "Done";
   } catch (err) {
     status.textContent = err.message;

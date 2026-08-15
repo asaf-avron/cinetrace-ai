@@ -8,3 +8,14 @@ def test_sentinel_instruction_includes_waste_sql() -> None:
     assert "status = 'running'" in text
     assert "cpu_hours >= 100" in text
     assert "run_query" in text
+
+
+def test_impact_sql_matches_sentinel_predicates() -> None:
+    from cinetrace.clickhouse.impact import CLASSIFY_JOBS, HEALTHY_BASELINE
+
+    assert "status = 'failed'" in CLASSIFY_JOBS
+    assert "queue_wait_seconds >= 3600" in CLASSIFY_JOBS
+    assert "INTERVAL 6 HOUR" in CLASSIFY_JOBS
+    assert "cpu_hours >= 100" in CLASSIFY_JOBS
+    assert "gpu_hours >= 50" in CLASSIFY_JOBS
+    assert "frames_done > 0" in HEALTHY_BASELINE

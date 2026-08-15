@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from cinetrace.clickhouse.client import credentials_ready
+from cinetrace.clickhouse.impact import fetch_impact
 from cinetrace.clickhouse.proposals import list_jobs, list_proposals
 from cinetrace.env import load_env
 from cinetrace.web.guard import HourlyLimiter, extract_token, run_enabled, token_ok
@@ -55,6 +56,13 @@ def api_proposals() -> dict:
     return {"proposals": _jsonable(list_proposals())}
 
 
+@app.get("/api/impact")
+def api_impact() -> dict:
+    if not credentials_ready():
+        raise HTTPException(503, "ClickHouse credentials are not set")
+    return _jsonable_value(fetch_impact())
+
+
 @app.post("/api/run")
 async def api_run(
     body: RunRequest | None = None,
@@ -76,14 +84,19 @@ async def api_run(
         "recorded": result["recorded"],
         "jobs": _jsonable(list_jobs()),
         "proposals": _jsonable(list_proposals()),
+        "impact": _jsonable_value(fetch_impact()),
     }
 
 
+def _jsonable_value(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _jsonable_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_jsonable_value(item) for item in value]
+    return value
+
+
 def _jsonable(rows: list[dict]) -> list[dict]:
-    out: list[dict] = []
-    for row in rows:
-        item = {}
-        for key, value in row.items():
-            item[key] = value.isoformat() if hasattr(value, "isoformat") else value
-        out.append(item)
-    return out
+    return [_jsonable_value(row) for row in rows]

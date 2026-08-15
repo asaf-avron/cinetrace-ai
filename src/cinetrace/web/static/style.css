@@ -32,6 +32,21 @@ button {
 }
 button:disabled { opacity: 0.5; cursor: wait; }
 #status { color: var(--muted); }
+.dashboard { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); padding: 16px 18px;
+}
+.impact-hero { display: flex; gap: 48px; flex-wrap: wrap; margin: 8px 0 12px; }
+.impact-label { margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
+.impact-usd { margin: 4px 0 0; font-size: 32px; font-weight: 600; color: var(--fail); }
+.impact-usd.after { color: var(--rec); }
+.impact-meta { margin: 0 0 12px; color: var(--text); }
+.impact-cats { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.impact-cats li {
+  border: 1px solid var(--line); padding: 4px 8px; color: var(--muted);
+}
+.impact-cats strong { color: var(--text); font-weight: 500; margin-right: 6px; }
+.impact-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
 .table-wrap { overflow: auto; border: 1px solid var(--line); background: var(--panel); }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
