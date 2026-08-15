@@ -87,15 +87,24 @@ uv run python scripts/sync_secrets.py
 gcloud run deploy cinetrace --source . --project=cinetrace-ai --region=us-central1 --max-instances=1 --quiet
 ```
 
+## License
+
+CineTrace AI is licensed under the [Apache License, Version 2.0](LICENSE).
+
+Copyright 2026 Asaf Avron
+
 ## Submission (Devpost)
 
 Deadline: **Sep 9, 2026 @ 2:00pm PDT**. Judging: implementation, design, impact, idea quality. ClickHouse track prizes: $7,500 / $4,500 / $3,000.
 
+This repo stays **private** until the board timing decision (target **~Sep 1**). Follow [docs/public-repo-checklist.md](docs/public-repo-checklist.md) to flip visibility, re-scan secrets, and paste the public URL on Devpost. Do **not** flip public from this README.
+
 Before submit:
 
-- [ ] Flip this repo from private to **public**
-- [ ] Add a complete open-source license (visible in GitHub About)
+- [ ] Flip this repo from private to **public** (checklist above; not yet)
+- [x] Add a complete open-source license (`LICENSE` is Apache-2.0; confirm it appears in GitHub About after the public flip)
 - [ ] Prove Google Cloud and ClickHouse are used at runtime in code
 - [ ] Hosted project URL
 - [ ] 3-minute **working demo** video (YouTube/Vimeo, English or English subtitles)
 - [ ] Complete the Devpost form and select the ClickHouse track
+- [ ] Replace the Devpost repository URL placeholder with `https://github.com/asaf-avron/cinetrace-ai` after the repo is public
