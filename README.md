@@ -78,6 +78,21 @@ The page and job/proposal tables are public. **Run supervisor** spends Vertex cr
 
 ClickHouse and `SUPERVISOR_RUN_TOKEN` live in Secret Manager. Wake the ClickHouse Cloud service before a demo so the first query does not time out.
 
+## Impact model
+
+The supervisor **Impact** card prices waste from live `render_jobs` rows (same seed as `src/cinetrace/schema/seed.sql`). Assumptions live in `src/cinetrace/clickhouse/impact.py`:
+
+| Rate | Value | Why |
+| --- | --- | --- |
+| GPU-hour | **$3.50** | Studio GPU slot; GCP A100-class on-demand order of magnitude |
+| CPU-hour | **$0.12** | Arnold / CPU render path; n2-standard vCPU order of magnitude |
+| Idle queue | GPU-hour × wait/3600 | Reserved slot sitting unused (`queue_wait_seconds >= 3600`) |
+| Overrun excess | hours above healthy completed hours/frame | Healthy = completed with `cpu_hours < 100` and `gpu_hours < 50` |
+
+Each job gets one primary class (failed, zombie, idle queue, overrun) so the headline dollar total is not double-counted. Retry loops are tagged for the waste-summary counts and are not added again.
+
+On the committed eight-row seed, that is **$625.12** current waste (166.5 GPU-h + 352.0 CPU-h). **If proposals applied** subtracts waste for any `job_id` that already has a `remediation_proposals` row. These rates are a judge narrative, not a vendor quote.
+
 Set a [budget alert](https://console.cloud.google.com/billing) on the `cinetrace-ai` billing account (50% / 90% of the $100 credits). Do not raise Vertex quotas. The Agent Engine `:query` URL is IAM-only — do not grant `allUsers` and do not use it as the public demo.
 
 Redeploy Cloud Run after code changes:
