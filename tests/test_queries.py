@@ -1,5 +1,5 @@
 def test_sentinel_instruction_includes_waste_sql() -> None:
-    from cinetrace.clickhouse.queries import sentinel_instruction
+    from cinetrace.clickhouse.queries import ALL_WASTE, sentinel_instruction
 
     text = sentinel_instruction()
     assert "status = 'failed'" in text
@@ -8,6 +8,13 @@ def test_sentinel_instruction_includes_waste_sql() -> None:
     assert "status = 'running'" in text
     assert "cpu_hours >= 100" in text
     assert "run_query" in text
+    assert list(ALL_WASTE) == [
+        "failed",
+        "retry_loops",
+        "idle_queue",
+        "zombies",
+        "overruns",
+    ]
 
 
 def test_impact_sql_matches_sentinel_predicates() -> None:

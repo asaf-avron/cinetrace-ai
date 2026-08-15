@@ -19,6 +19,8 @@ def test_index_page(client: TestClient) -> None:
     assert "Run supervisor" in response.text
     assert "Estimated waste" in response.text
     assert "If proposals applied" in response.text
+    assert "Waste by category" in response.text
+    assert "Sentinel queries" in response.text
 
 
 def test_health(client: TestClient) -> None:
@@ -63,3 +65,36 @@ def test_api_impact(client: TestClient) -> None:
     job_ids = {row["job_id"] for row in payload["jobs"]}
     assert {"job-fail-lic", "job-zombie", "job-overrun", "job-idle-queue"} <= job_ids
     assert payload["assumptions"]["gpu_hour_usd"] == 3.5
+
+
+@pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
+def test_api_waste(client: TestClient) -> None:
+    response = client.get("/api/waste")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "clickhouse"
+    assert "run_query" in payload["mcp_tools"]
+    assert list(payload["summary"]) == [
+        "failed",
+        "retry_loops",
+        "idle_queue",
+        "zombies",
+        "overruns",
+    ]
+    assert payload["summary"]["failed"] == 3
+    assert payload["summary"]["retry_loops"] == 3
+    assert payload["summary"]["idle_queue"] == 1
+    assert payload["summary"]["zombies"] == 1
+    assert payload["summary"]["overruns"] == 1
+    assert len(payload["queries"]) == 5
+    failed = payload["queries"][0]
+    assert failed["id"] == "failed"
+    assert "status = 'failed'" in failed["sql"]
+    assert {row["job_id"] for row in failed["rows"]} == {
+        "job-fail-oom",
+        "job-fail-lic",
+        "job-retry-loop",
+    }

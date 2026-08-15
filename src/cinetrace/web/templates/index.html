@@ -41,6 +41,20 @@
       <ul class="impact-cats" id="impact-cats"></ul>
       <p class="impact-note" id="impact-note"></p>
     </article>
+    <article class="card waste" id="waste">
+      <h2>Waste by category</h2>
+      <p class="waste-lead">Live counts from the five Diagnostic Sentinel queries</p>
+      <div class="waste-grid" id="waste-summary"></div>
+    </article>
+  </section>
+
+  <section id="sentinel-queries">
+    <h2>Sentinel queries</h2>
+    <p class="panel-lead" id="waste-note">
+      Exact SQL the Diagnostic Sentinel runs via MCP <code>run_query</code>.
+      Results are live from the same ClickHouse service.
+    </p>
+    <div id="waste-queries"></div>
   </section>
 
   <section>

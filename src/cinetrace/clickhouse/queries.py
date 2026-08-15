@@ -43,6 +43,60 @@ ALL_WASTE = {
     "overruns": OVERRUNS,
 }
 
+CATEGORY_LABELS = {
+    "failed": "Failed",
+    "retry_loops": "Retry loops",
+    "idle_queue": "Idle queue",
+    "zombies": "Zombies",
+    "overruns": "Overruns",
+}
+
+MCP_TOOLS = ("list_databases", "list_tables", "run_query")
+
+
+def fetch_waste_showcase() -> dict:
+    """Run the five Sentinel queries against live ClickHouse.
+
+    Agents execute this same SQL via MCP ``run_query``. The supervisor UI uses
+    clickhouse-connect over HTTPS to the same service so the page can show
+    counts and sample rows without spawning stdio MCP on every refresh.
+    """
+    from cinetrace.clickhouse.client import get_client
+
+    client = get_client()
+    try:
+        queries: list[dict] = []
+        summary: dict[str, int] = {}
+        for name, sql in ALL_WASTE.items():
+            result = client.query(sql.strip())
+            rows = [dict(zip(result.column_names, row)) for row in result.result_rows]
+            count = len(rows)
+            summary[name] = count
+            queries.append(
+                {
+                    "id": name,
+                    "label": CATEGORY_LABELS[name],
+                    "sql": sql.strip(),
+                    "mcp_tool": "run_query",
+                    "columns": list(result.column_names),
+                    "rows": rows,
+                    "count": count,
+                }
+            )
+        return {
+            "source": "clickhouse",
+            "mcp_tools": list(MCP_TOOLS),
+            "note": (
+                "Exact Diagnostic Sentinel queries. Agents run these via MCP "
+                "run_query; this panel executes the same SQL on the same "
+                "ClickHouse service."
+            ),
+            "summary": summary,
+            "queries": queries,
+        }
+    finally:
+        client.close()
+
 
 def sentinel_instruction() -> str:
     blocks = "\n\n".join(
