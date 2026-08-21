@@ -45,6 +45,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(webapp, "fetch_waste_showcase", lambda: {"summary": {}})
     monkeypatch.setattr(webapp, "fetch_farm_rollup", lambda: {"days": []})
     monkeypatch.setattr(webapp, "fetch_query_log", lambda: {"ok": False, "rows": []})
+    monkeypatch.setattr(webapp, "fetch_shots_at_risk", lambda: {"shots": []})
+    monkeypatch.setattr(webapp, "fetch_root_cause", lambda: {"rows": []})
     monkeypatch.setattr(webapp, "credentials_ready", lambda: True)
     return TestClient(webapp.app)
 
@@ -118,6 +120,8 @@ def test_run_public_skips_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(webapp, "fetch_waste_showcase", lambda: {})
     monkeypatch.setattr(webapp, "fetch_farm_rollup", lambda: {"days": []})
     monkeypatch.setattr(webapp, "fetch_query_log", lambda: {"ok": False, "rows": []})
+    monkeypatch.setattr(webapp, "fetch_shots_at_risk", lambda: {"shots": []})
+    monkeypatch.setattr(webapp, "fetch_root_cause", lambda: {"rows": []})
     monkeypatch.setattr(webapp, "credentials_ready", lambda: True)
     client = TestClient(webapp.app)
     response = client.post("/api/run", json={})

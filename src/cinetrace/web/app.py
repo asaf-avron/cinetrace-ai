@@ -216,11 +216,11 @@ async def api_stream() -> StreamingResponse:
 @app.post("/api/proposals/decide")
 def api_decide(body: DecisionRequest) -> dict:
     """Approve or reject an agent proposal. This is what moves the dollar figure."""
-    _require_clickhouse()
     if body.decision not in DECISIONS:
         raise HTTPException(400, f"decision must be one of {sorted(DECISIONS)}")
     if body.action not in ALLOWED_ACTIONS:
         raise HTTPException(400, f"action must be one of {sorted(ALLOWED_ACTIONS)}")
+    _require_clickhouse()
     if not app.state.decision_limiter.allow():
         raise HTTPException(429, "Decision limit reached")
     result = decide_proposal(
