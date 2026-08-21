@@ -35,7 +35,16 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
                     }
                 ],
                 "highlighted_job_ids": ["job-fail-lic"],
-                "mcp_calls": [],
+                "mcp_calls": [
+                    {
+                        "tool": "run_query",
+                        "args": {
+                            "query": "SELECT job_id FROM render_jobs WHERE status = 'failed'"
+                        },
+                        "query": "SELECT job_id FROM render_jobs WHERE status = 'failed'",
+                        "mcp_server": "mcp-clickhouse",
+                    }
+                ],
             }
         ),
     )
@@ -71,6 +80,8 @@ def test_run_bearer_token_ok(client: TestClient) -> None:
     assert payload["timeline"][0]["agent"] == "sentinel"
     assert payload["highlighted_job_ids"] == ["job-fail-lic"]
     assert payload["mcp_server"] == "mcp-clickhouse"
+    assert payload["mcp_calls"][0]["tool"] == "run_query"
+    assert "query" in payload["mcp_calls"][0]["args"]
 
 
 def test_run_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

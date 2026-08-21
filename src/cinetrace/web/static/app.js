@@ -240,11 +240,19 @@ function renderMcp(calls, server) {
     const li = document.createElement("li");
     const head = document.createElement("p");
     head.className = "mcp-head";
-    head.textContent = `${call.label || call.author} · ${call.tool || "run_query"} · ${call.mcp_server || "mcp-clickhouse"}`;
+    const trunc = call.truncated ? " · truncated" : "";
+    head.textContent = `${call.label || call.author} · ${call.tool || "run_query"} · ${call.mcp_server || "mcp-clickhouse"}${trunc}`;
     const pre = document.createElement("pre");
     pre.className = "mcp-sql";
-    pre.textContent = call.query || "(no query text on this tool call)";
+    const args = call.args && Object.keys(call.args).length ? call.args : null;
+    pre.textContent = call.query || (args ? JSON.stringify(args) : "(no query text on this tool call)");
     li.append(head, pre);
+    if (call.result != null) {
+      const result = document.createElement("pre");
+      result.className = "mcp-result";
+      result.textContent = typeof call.result === "string" ? call.result : JSON.stringify(call.result);
+      li.append(result);
+    }
     mcpCallsEl.append(li);
   }
 }

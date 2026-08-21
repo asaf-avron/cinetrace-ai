@@ -24,6 +24,7 @@ def test_index_page(client: TestClient) -> None:
     assert "The three agents" in response.text
     assert "kill render-farm waste" in response.text
     assert "mcp-clickhouse" in response.text
+    assert "This run" in response.text
     assert "farm-spark" in response.text
 
 

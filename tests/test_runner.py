@@ -43,5 +43,6 @@ def test_mcp_calls_from_run_query_part() -> None:
     calls = _mcp_calls_from_event(Event())
     assert calls[0]["tool"] == "run_query"
     assert calls[0]["mcp_server"] == "mcp-clickhouse"
+    assert calls[0]["args"]["query"] == FC.args["query"]
     assert "status = 'failed'" in calls[0]["query"]
     assert calls[0]["agent"] == "sentinel"
