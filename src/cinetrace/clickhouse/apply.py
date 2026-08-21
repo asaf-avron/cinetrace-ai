@@ -1,4 +1,10 @@
-"""Apply schema and seed SQL to ClickHouse Cloud over HTTPS."""
+"""Apply schema DDL to ClickHouse Cloud over HTTPS.
+
+Numbered files run in filename order, which is load-bearing: ``005_rollups.sql``
+creates a materialized view over ``frame_samples``, and a materialized view only
+sees rows inserted *after* it exists. Schema first, then
+``python -m cinetrace.clickhouse.generate`` to fill the farm.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,10 @@ from pathlib import Path
 from cinetrace.clickhouse.client import get_client
 
 SCHEMA_DIR = Path(__file__).resolve().parents[1] / "schema"
+
+
+def schema_files() -> list[Path]:
+    return sorted(SCHEMA_DIR.glob("[0-9][0-9][0-9]_*.sql"))
 
 
 def _statements(sql: str) -> list[str]:
@@ -33,11 +43,12 @@ def apply_file(name: str) -> None:
 
 
 def main() -> None:
-    apply_file("001_render_jobs.sql")
-    apply_file("002_remediation_proposals.sql")
-    apply_file("003_proposal_outcomes.sql")
-    apply_file("seed.sql")
-    print("Applied schema and seed to ClickHouse.")
+    for path in schema_files():
+        apply_file(path.name)
+        print(f"applied {path.name}")
+    print(
+        "Schema applied. Run `python -m cinetrace.clickhouse.generate` to build the farm."
+    )
 
 
 if __name__ == "__main__":

@@ -1,35 +1,32 @@
-"""Dollar impact of render-farm waste from live ClickHouse telemetry.
+"""What the waste costs, priced in ClickHouse rather than in Python.
 
-Rate assumptions (studio-lot ballpark for the judge narrative, not a vendor quote):
+The previous version pulled every job over the wire and summed in a loop. That
+worked at 62 rows and falls over at 200,000. Everything here is an aggregate
+that runs on the cluster; only totals and a top-N list come back.
 
-- ``GPU_HOUR_USD = 3.50`` — dedicated GPU render slot. Order of magnitude for a
-  GCP A100-class on-demand hour (2024–2026 public list pricing).
-- ``CPU_HOUR_USD = 0.12`` — CPU render / Arnold CPU path. Order of magnitude for
-  an n2-standard vCPU hour.
-- Idle queued jobs are priced as reserved GPU-slot hours
-  (``queue_wait_seconds / 3600 * GPU_HOUR_USD``).
+Two numbers, because they answer different questions:
 
-Waste attribution uses one primary class per job so the headline total is not
-double-counted:
+- **open** — waste burning right now: zombies holding GPUs, idle queue entries
+  holding reserved slots, failures and overruns from the last 48 hours. This is
+  what an agent can still do something about, and it is the number that moves
+  when a human approves a remediation.
+- **historical** — the same pricing over the full 90 days in the farm. Nobody
+  can recover it; it exists to size the problem honestly.
 
-- **zombie** — ``status = running`` and ``started_at`` older than 6 hours; all
-  recorded CPU/GPU hours are waste.
-- **failed** — ``status = failed``; all recorded CPU/GPU hours are waste (no
-  deliverable frames).
-- **idle_queue** — ``status = queued`` and wait ≥ 3600s; opportunity cost of the
-  held slot (no compute burned yet).
-- **overrun** — completed with ``cpu_hours >= 100`` or ``gpu_hours >= 50``;
-  hours above the mean hours-per-finished-frame of healthy completed jobs
-  (completed, under those thresholds, ``frames_done > 0``).
-- **healthy** — everything else; $0 waste.
+Rate assumptions (studio-lot ballpark for the judge narrative, not a quote):
 
-``retry_loops`` (``retry_count >= 4``) is a tag that overlaps failed jobs. It is
-counted for the waste-summary card and is not added again into the dollar total.
+- ``GPU_HOUR_USD = 3.50`` — dedicated GPU render slot, GCP A100-class order of
+  magnitude.
+- ``CPU_HOUR_USD = 0.12`` — CPU render path, n2-standard vCPU order of magnitude.
 
-Before / after: a job's waste is treated as recovered when any
-``remediation_proposals`` row exists for that ``job_id`` (dry-run applied, for
-the judge narrative). Numbers are always derived from live ``render_jobs`` rows,
-never invented.
+Waste attribution is one primary class per job, defined in ``job_waste``
+(``006_cohort_baselines.sql``), so the headline is never double-counted.
+``retry_loop`` is a tag that overlaps ``failed``; it is counted in the category
+card and never added to the total again.
+
+Recovery is credited on **human approval**, not on the agent's proposal. An
+agent finding waste does not reduce the bill; a supervisor approving the fix
+does.
 """
 
 from __future__ import annotations
@@ -37,238 +34,201 @@ from __future__ import annotations
 from typing import Any
 
 from cinetrace.clickhouse.client import get_client
+from cinetrace.clickhouse.queries import run_with_stats
 
 GPU_HOUR_USD = 3.50
 CPU_HOUR_USD = 0.12
-
-# Same predicates as cinetrace.clickhouse.queries so the $ card matches Sentinel.
-CLASSIFY_JOBS = """
-SELECT
-    job_id, show, shot, status, error_class, retry_count,
-    cpu_hours, gpu_hours, queue_wait_seconds,
-    frames_done, frames_total, started_at,
-    multiIf(
-        status = 'running' AND started_at < now('UTC') - INTERVAL 6 HOUR, 'zombie',
-        status = 'failed', 'failed',
-        status = 'queued' AND queue_wait_seconds >= 3600, 'idle_queue',
-        status = 'completed' AND (cpu_hours >= 100 OR gpu_hours >= 50), 'overrun',
-        'healthy'
-    ) AS waste_class
-FROM render_jobs
-ORDER BY job_id
-"""
-
-HEALTHY_BASELINE = """
-SELECT
-    if(sum(frames_done) = 0, 0, sum(cpu_hours) / sum(frames_done)) AS cpu_per_frame,
-    if(sum(frames_done) = 0, 0, sum(gpu_hours) / sum(frames_done)) AS gpu_per_frame
-FROM render_jobs
-WHERE status = 'completed'
-  AND cpu_hours < 100
-  AND gpu_hours < 50
-  AND frames_done > 0
-"""
-
-PROPOSED_JOBS = """
-SELECT DISTINCT job_id
-FROM remediation_proposals
-"""
+HISTORY_DAYS = 90
 
 CATEGORY_ORDER = ("failed", "retry_loops", "idle_queue", "zombies", "overruns")
+
+CATEGORY_CLASS = {
+    "failed": "failed",
+    "idle_queue": "idle_queue",
+    "zombies": "zombie",
+    "overruns": "overrun",
+}
 
 ASSUMPTIONS = {
     "gpu_hour_usd": GPU_HOUR_USD,
     "cpu_hour_usd": CPU_HOUR_USD,
     "idle_queue_priced_as": "reserved_gpu_slot_hours",
-    "overrun_baseline": "mean_hours_per_finished_frame_of_healthy_completed_jobs",
+    "overrun_baseline": "per-cohort tDigest fence, p50 + 3 * (p95 - p50)",
     "zombie_age": "running and started_at older than 6 hours",
-    "proposal_recovery": "any remediation_proposals row for the job_id",
+    "open_window": "running, queued, or ended in the last 48 hours",
+    "recovery": "credited when a human approves the proposal, not when the agent files it",
 }
 
+_USD = "(waste_cpu_hours * {cpu:Float64} + waste_gpu_hours * {gpu:Float64})"
 
-def classify_job(job: dict[str, Any], *, now_utc=None) -> str:
-    """Primary waste class. ``now_utc`` is only for tests; live SQL uses now('UTC')."""
-    status = job.get("status")
-    if status == "failed":
-        return "failed"
-    if status == "queued" and int(job.get("queue_wait_seconds") or 0) >= 3600:
-        return "idle_queue"
-    if status == "completed" and (
-        float(job.get("cpu_hours") or 0) >= 100 or float(job.get("gpu_hours") or 0) >= 50
-    ):
-        return "overrun"
-    if status == "running":
-        started = job.get("started_at")
-        if now_utc is not None and started is not None:
-            age_hours = (now_utc - started).total_seconds() / 3600.0
-            if age_hours >= 6:
-                return "zombie"
-        elif job.get("waste_class") == "zombie":
-            return "zombie"
-    if job.get("waste_class") in {"zombie", "failed", "idle_queue", "overrun", "healthy"}:
-        return str(job["waste_class"])
-    return "healthy"
+TOTALS = f"""
+WITH
+    approved AS (
+        SELECT DISTINCT job_id FROM proposal_state WHERE decision = 'approved'
+    ),
+    pending AS (
+        SELECT DISTINCT job_id FROM proposal_state WHERE decision = 'pending'
+    )
+SELECT
+    count() AS total_jobs,
+    countIf(waste_class != 'healthy') AS waste_jobs,
+    countIf(is_open) AS open_jobs,
 
+    round(sumIf({_USD}, is_open), 2) AS open_usd,
+    round(sumIf(waste_cpu_hours, is_open), 1) AS open_cpu_hours,
+    round(sumIf(waste_gpu_hours, is_open), 1) AS open_gpu_hours,
 
-def healthy_baseline(jobs: list[dict[str, Any]]) -> dict[str, float]:
-    cpu = 0.0
-    gpu = 0.0
-    frames = 0.0
-    for job in jobs:
-        if job.get("status") != "completed":
-            continue
-        if float(job.get("cpu_hours") or 0) >= 100 or float(job.get("gpu_hours") or 0) >= 50:
-            continue
-        done = float(job.get("frames_done") or 0)
-        if done <= 0:
-            continue
-        cpu += float(job.get("cpu_hours") or 0)
-        gpu += float(job.get("gpu_hours") or 0)
-        frames += done
-    if frames <= 0:
-        return {"cpu_per_frame": 0.0, "gpu_per_frame": 0.0}
-    return {"cpu_per_frame": cpu / frames, "gpu_per_frame": gpu / frames}
+    round(sumIf({_USD}, is_open AND job_id IN approved), 2) AS approved_usd,
+    countIf(is_open AND job_id IN approved) AS approved_jobs,
+    round(sumIf({_USD}, is_open AND job_id IN pending), 2) AS pending_usd,
+    countIf(is_open AND job_id IN pending) AS pending_jobs,
 
+    round(sumIf({_USD}, waste_class != 'healthy'), 2) AS historical_usd,
+    round(sumIf(waste_cpu_hours, waste_class != 'healthy'), 1) AS historical_cpu_hours,
+    round(sumIf(waste_gpu_hours, waste_class != 'healthy'), 1) AS historical_gpu_hours
+FROM job_waste
+"""
 
-def waste_hours(job: dict[str, Any], baseline: dict[str, float]) -> tuple[float, float]:
-    """Return ``(waste_cpu_hours, waste_gpu_hours)``. Idle GPU hours are slot-hours."""
-    waste_class = job.get("waste_class") or classify_job(job)
-    if waste_class in {"failed", "zombie"}:
-        return float(job.get("cpu_hours") or 0), float(job.get("gpu_hours") or 0)
-    if waste_class == "idle_queue":
-        return 0.0, float(job.get("queue_wait_seconds") or 0) / 3600.0
-    if waste_class == "overrun":
-        frames = float(job.get("frames_done") or 0)
-        excess_cpu = max(
-            0.0, float(job.get("cpu_hours") or 0) - baseline["cpu_per_frame"] * frames
-        )
-        excess_gpu = max(
-            0.0, float(job.get("gpu_hours") or 0) - baseline["gpu_per_frame"] * frames
-        )
-        return excess_cpu, excess_gpu
-    return 0.0, 0.0
+# Output aliases must not shadow the columns they aggregate: `AS waste_cpu_hours`
+# over `sum(waste_cpu_hours)` makes the *_USD expression resolve to the alias,
+# which ClickHouse rejects as an aggregate inside an aggregate.
+CATEGORIES = f"""
+SELECT
+    waste_class AS category,
+    count() AS job_count,
+    countIf(is_open) AS open_count,
+    round(sum({_USD}), 2) AS waste_usd,
+    round(sumIf({_USD}, is_open), 2) AS open_usd,
+    round(sum(waste_cpu_hours), 1) AS cpu_hours_total,
+    round(sum(waste_gpu_hours), 1) AS gpu_hours_total
+FROM job_waste
+WHERE waste_class != 'healthy'
+GROUP BY category
+"""
+
+RETRY_LOOP_CATEGORY = f"""
+SELECT
+    count() AS job_count,
+    countIf(is_open) AS open_count,
+    round(sum({_USD}), 2) AS waste_usd,
+    round(sumIf({_USD}, is_open), 2) AS open_usd,
+    round(sum(waste_cpu_hours), 1) AS cpu_hours_total,
+    round(sum(waste_gpu_hours), 1) AS gpu_hours_total
+FROM job_waste
+WHERE retry_loop AND waste_class != 'healthy'
+"""
+
+TOP_OPEN = f"""
+WITH decided AS (
+    SELECT job_id, argMax(decision, created_at) AS decision
+    FROM proposal_state GROUP BY job_id
+)
+SELECT
+    w.job_id AS job_id,
+    w.show AS show,
+    w.shot AS shot,
+    w.renderer AS renderer,
+    w.host AS host,
+    w.status AS status,
+    w.waste_class AS waste_class,
+    w.retry_loop AS retry_loop,
+    w.error_class AS error_class,
+    w.retry_count AS retry_count,
+    round(w.waste_cpu_hours, 1) AS cpu_hours_wasted,
+    round(w.waste_gpu_hours, 1) AS gpu_hours_wasted,
+    round(w.waste_cpu_hours * {{cpu:Float64}} + w.waste_gpu_hours * {{gpu:Float64}}, 2) AS waste_usd,
+    round(w.hours_per_frame, 3) AS hours_per_frame,
+    round(w.cohort_p50, 3) AS cohort_p50,
+    w.frames_done AS frames_done,
+    w.frames_total AS frames_total,
+    coalesce(d.decision, 'none') AS decision
+FROM job_waste AS w
+LEFT JOIN decided AS d ON d.job_id = w.job_id
+WHERE w.is_open
+ORDER BY waste_usd DESC
+LIMIT {{limit:UInt32}}
+"""
 
 
 def hours_to_usd(cpu_hours: float, gpu_hours: float) -> float:
+    """Price a pair of hour counts. Kept as a function so tests can assert the math."""
     return cpu_hours * CPU_HOUR_USD + gpu_hours * GPU_HOUR_USD
 
 
-def _round_money(value: float) -> float:
-    return round(value + 0.0, 2)
+def _money(value: Any) -> float:
+    return round(float(value or 0), 2)
 
 
-def _round_hours(value: float) -> float:
-    return round(value + 0.0, 3)
+def _hours(value: Any) -> float:
+    return round(float(value or 0), 1)
 
 
-def summarize_impact(
-    jobs: list[dict[str, Any]],
-    proposed_job_ids: set[str],
-    baseline: dict[str, float] | None = None,
-) -> dict[str, Any]:
-    """Price classified jobs. Used by the API and by unit tests with seed-shaped rows."""
-    baseline = baseline or healthy_baseline(jobs)
-    priced: list[dict[str, Any]] = []
-    for job in jobs:
-        waste_class = job.get("waste_class") or classify_job(job)
-        row = dict(job)
-        row["waste_class"] = waste_class
-        cpu_h, gpu_h = waste_hours(row, baseline)
-        usd = hours_to_usd(cpu_h, gpu_h)
-        recovered = waste_class != "healthy" and row["job_id"] in proposed_job_ids
-        priced.append(
-            {
-                "job_id": row["job_id"],
-                "show": row.get("show"),
-                "shot": row.get("shot"),
-                "status": row.get("status"),
-                "waste_class": waste_class,
-                "retry_loop": int(row.get("retry_count") or 0) >= 4,
-                "waste_cpu_hours": cpu_h,
-                "waste_gpu_hours": gpu_h,
-                "waste_usd": usd,
-                "has_proposal": row["job_id"] in proposed_job_ids,
-                "recovered_usd": usd if recovered else 0.0,
-            }
-        )
-
-    waste_jobs = [row for row in priced if row["waste_class"] != "healthy"]
-    before = _round_money(sum(row["waste_usd"] for row in waste_jobs))
-    recovered_total = _round_money(sum(row["recovered_usd"] for row in waste_jobs))
-    after = _round_money(before - recovered_total)
-
-    def _bucket(name: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
-        return {
-            "category": name,
-            "job_count": len(rows),
-            "waste_usd": _round_money(sum(row["waste_usd"] for row in rows)),
-            "waste_cpu_hours": _round_hours(sum(row["waste_cpu_hours"] for row in rows)),
-            "waste_gpu_hours": _round_hours(sum(row["waste_gpu_hours"] for row in rows)),
-            "job_ids": [row["job_id"] for row in rows],
-        }
-
-    categories = {
-        "failed": _bucket("failed", [r for r in priced if r["waste_class"] == "failed"]),
-        "retry_loops": _bucket("retry_loops", [r for r in priced if r["retry_loop"]]),
-        "idle_queue": _bucket(
-            "idle_queue", [r for r in priced if r["waste_class"] == "idle_queue"]
-        ),
-        "zombies": _bucket("zombies", [r for r in priced if r["waste_class"] == "zombie"]),
-        "overruns": _bucket("overruns", [r for r in priced if r["waste_class"] == "overrun"]),
-    }
-
-    return {
-        "before_usd": before,
-        "after_usd": after,
-        "recovered_usd": recovered_total,
-        "potential_usd": before,
-        "waste_cpu_hours": _round_hours(sum(r["waste_cpu_hours"] for r in waste_jobs)),
-        "waste_gpu_hours": _round_hours(sum(r["waste_gpu_hours"] for r in waste_jobs)),
-        "job_count": len(priced),
-        "waste_job_count": len(waste_jobs),
-        "proposed_job_count": sum(1 for r in waste_jobs if r["has_proposal"]),
-        "open_usd": after,
-        "recovery_state": (
-            "none"
-            if recovered_total <= 0
-            else ("full" if after <= 0 else "partial")
-        ),
-        "baseline": {
-            "cpu_per_frame": round(baseline["cpu_per_frame"], 6),
-            "gpu_per_frame": round(baseline["gpu_per_frame"], 6),
-        },
-        "assumptions": ASSUMPTIONS,
-        "categories": [categories[name] for name in CATEGORY_ORDER],
-        "jobs": [
-            {
-                **row,
-                "waste_cpu_hours": _round_hours(row["waste_cpu_hours"]),
-                "waste_gpu_hours": _round_hours(row["waste_gpu_hours"]),
-                "waste_usd": _round_money(row["waste_usd"]),
-                "recovered_usd": _round_money(row["recovered_usd"]),
-            }
-            for row in priced
-        ],
-    }
-
-
-def fetch_impact() -> dict[str, Any]:
-    """Run real ClickHouse SELECTs, then price the returned seed/live rows."""
+def fetch_impact(top_n: int = 25) -> dict[str, Any]:
+    """Aggregate the whole farm on the cluster and return totals plus a top-N."""
+    rates = {"cpu": CPU_HOUR_USD, "gpu": GPU_HOUR_USD}
     client = get_client()
     try:
-        classified = client.query(CLASSIFY_JOBS)
-        jobs = [dict(zip(classified.column_names, row)) for row in classified.result_rows]
-        base = client.query(HEALTHY_BASELINE)
-        if base.result_rows:
-            cpu_pf, gpu_pf = base.result_rows[0]
-            baseline = {
-                "cpu_per_frame": float(cpu_pf or 0),
-                "gpu_per_frame": float(gpu_pf or 0),
-            }
-        else:
-            baseline = healthy_baseline(jobs)
-        proposed = client.query(PROPOSED_JOBS)
-        proposed_ids = {str(row[0]) for row in proposed.result_rows}
+        totals_rows, _cols, stats = run_with_stats(client, TOTALS, rates)
+        totals = totals_rows[0] if totals_rows else {}
+
+        cat_rows, _cc, _cs = run_with_stats(client, CATEGORIES, rates)
+        by_class = {row["category"]: row for row in cat_rows}
+
+        retry_rows, _rc, _rs = run_with_stats(client, RETRY_LOOP_CATEGORY, rates)
+        by_class["retry_loops"] = retry_rows[0] if retry_rows else {}
+
+        top_rows, _tc, _ts = run_with_stats(
+            client, TOP_OPEN, {**rates, "limit": top_n}
+        )
     finally:
         client.close()
-    return summarize_impact(jobs, proposed_ids, baseline)
+
+    def _category(name: str) -> dict[str, Any]:
+        row = by_class.get(CATEGORY_CLASS.get(name, name), {}) or {}
+        return {
+            "category": name,
+            "job_count": int(row.get("job_count") or 0),
+            "open_count": int(row.get("open_count") or 0),
+            "waste_usd": _money(row.get("waste_usd")),
+            "open_usd": _money(row.get("open_usd")),
+            "waste_cpu_hours": _hours(row.get("cpu_hours_total")),
+            "waste_gpu_hours": _hours(row.get("gpu_hours_total")),
+        }
+
+    open_usd = _money(totals.get("open_usd"))
+    approved_usd = _money(totals.get("approved_usd"))
+    pending_usd = _money(totals.get("pending_usd"))
+    historical_usd = _money(totals.get("historical_usd"))
+
+    return {
+        "source": "clickhouse",
+        "open": {
+            "usd": open_usd,
+            "remaining_usd": _money(open_usd - approved_usd),
+            "approved_usd": approved_usd,
+            "pending_usd": pending_usd,
+            "job_count": int(totals.get("open_jobs") or 0),
+            "approved_jobs": int(totals.get("approved_jobs") or 0),
+            "pending_jobs": int(totals.get("pending_jobs") or 0),
+            "cpu_hours": _hours(totals.get("open_cpu_hours")),
+            "gpu_hours": _hours(totals.get("open_gpu_hours")),
+        },
+        "historical": {
+            "usd": historical_usd,
+            "days": HISTORY_DAYS,
+            "annualized_usd": _money(historical_usd * 365 / HISTORY_DAYS),
+            "job_count": int(totals.get("waste_jobs") or 0),
+            "total_jobs": int(totals.get("total_jobs") or 0),
+            "cpu_hours": _hours(totals.get("historical_cpu_hours")),
+            "gpu_hours": _hours(totals.get("historical_gpu_hours")),
+        },
+        "recovery_state": (
+            "none"
+            if approved_usd <= 0
+            else ("full" if approved_usd >= open_usd else "partial")
+        ),
+        "categories": [_category(name) for name in CATEGORY_ORDER],
+        "top_jobs": top_rows,
+        "assumptions": ASSUMPTIONS,
+        "stats": stats,
+    }

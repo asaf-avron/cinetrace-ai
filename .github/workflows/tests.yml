@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --extra dev
+
+      # No ClickHouse or Vertex credentials in CI on purpose. Tests that need a
+      # live cluster skip themselves; what runs here is the SQL contract, the
+      # agent wiring, the run gate, and the event folding.
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Prove the partner and cloud SDKs are imported, not just named
+        run: |
+          uv run python -c "
+          import clickhouse_connect, mcp_clickhouse, google.adk, vertexai
+          from cinetrace.agent import root_agent
+          print('root_agent:', root_agent.name)
+          print('stages:', [a.name for a in root_agent.sub_agents])
+          "

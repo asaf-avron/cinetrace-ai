@@ -5,6 +5,11 @@ from fastapi.testclient import TestClient
 
 from cinetrace.clickhouse.client import credentials_ready
 
+needs_clickhouse = pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
+
 
 @pytest.fixture
 def client() -> TestClient:
@@ -16,79 +21,48 @@ def client() -> TestClient:
 def test_index_page(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Run supervisor" in response.text
-    assert "Estimated waste" in response.text
-    assert "After recorded dry-runs" in response.text
-    assert "Waste by category" in response.text
-    assert "Sentinel queries" in response.text
-    assert "The three agents" in response.text
-    assert "kill render-farm waste" in response.text
-    assert "mcp-clickhouse" in response.text
-    assert "farm-spark" in response.text
+    page = response.text
+    for marker in (
+        "Run supervisor",
+        "Dailies at risk",
+        "protect the dailies",
+        "Waste by category",
+        "The three agents",
+        "Root cause",
+        "Have we seen this before?",
+        "mcp-clickhouse",
+        "farm-spark",
+        "shot-cards",
+    ):
+        assert marker in page, f"missing {marker!r}"
 
 
 def test_health(client: TestClient) -> None:
-    response = client.get("/api/health")
-    assert response.status_code == 200
-    payload = response.json()
+    payload = client.get("/api/health").json()
     assert payload["ok"] is True
-    assert "run_public" in payload
-    assert "clickhouse" in payload
+    assert {"run_public", "clickhouse", "run_enabled", "live"} <= set(payload)
 
 
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
-def test_api_jobs(client: TestClient) -> None:
-    response = client.get("/api/jobs")
-    assert response.status_code == 200
-    jobs = response.json()["jobs"]
-    assert len(jobs) >= 50
-    assert {job["job_id"] for job in jobs} >= {
-        "job-fail-lic",
-        "job-zombie",
-        "job-fail-oom",
-        "job-retry-loop",
-        "job-idle-queue",
-        "job-overrun",
-    }
+@needs_clickhouse
+def test_api_jobs_is_bounded_and_leads_with_waste(client: TestClient) -> None:
+    jobs = client.get("/api/jobs").json()["jobs"]
+    assert 0 < len(jobs) <= 60, "198k rows must never be serialised to the page"
+    assert jobs[0]["is_open"], "open waste sorts first"
+    assert "waste_usd" in jobs[0]
 
 
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
-def test_api_proposals(client: TestClient) -> None:
-    response = client.get("/api/proposals")
-    assert response.status_code == 200
-    assert "proposals" in response.json()
-
-
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
-def test_api_impact(client: TestClient) -> None:
-    response = client.get("/api/impact")
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["before_usd"] > 0
-    assert payload["after_usd"] <= payload["before_usd"]
-    assert payload["waste_job_count"] >= 5
-    job_ids = {row["job_id"] for row in payload["jobs"]}
-    assert {"job-fail-lic", "job-zombie", "job-overrun", "job-idle-queue"} <= job_ids
+@needs_clickhouse
+def test_api_impact_separates_open_from_history(client: TestClient) -> None:
+    payload = client.get("/api/impact").json()
+    assert payload["open"]["usd"] >= 0
+    assert payload["historical"]["usd"] > payload["open"]["usd"]
+    assert payload["historical"]["total_jobs"] > 100_000
     assert payload["assumptions"]["gpu_hour_usd"] == 3.5
 
 
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
-def test_api_waste(client: TestClient) -> None:
-    response = client.get("/api/waste")
-    assert response.status_code == 200
-    payload = response.json()
+@needs_clickhouse
+def test_api_waste_reports_query_cost(client: TestClient) -> None:
+    payload = client.get("/api/waste").json()
     assert payload["source"] == "clickhouse"
     assert "run_query" in payload["mcp_tools"]
     assert list(payload["summary"]) == [
@@ -98,44 +72,71 @@ def test_api_waste(client: TestClient) -> None:
         "zombies",
         "overruns",
     ]
-    assert payload["summary"]["failed"] == 3
-    assert payload["summary"]["retry_loops"] == 3
-    assert payload["summary"]["idle_queue"] == 1
-    assert payload["summary"]["zombies"] == 1
-    assert payload["summary"]["overruns"] == 1
-    assert len(payload["queries"]) == 5
-    failed = payload["queries"][0]
-    assert failed["id"] == "failed"
-    assert "status = 'failed'" in failed["sql"]
-    assert {row["job_id"] for row in failed["rows"]} == {
-        "job-fail-oom",
-        "job-fail-lic",
-        "job-retry-loop",
-    }
+    assert all(q["stats"]["rows_read"] > 0 for q in payload["queries"])
 
 
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
-def test_api_rollup(client: TestClient) -> None:
-    response = client.get("/api/rollup")
+@needs_clickhouse
+def test_api_shots_projects_delivery_risk(client: TestClient) -> None:
+    payload = client.get("/api/shots").json()
+    assert payload["tracked_count"] > 0
+    assert payload["at_risk_count"] <= payload["tracked_count"]
+    assert payload["recoverable_count"] <= payload["at_risk_count"]
+    assert "review_at" in payload["columns"]
+
+
+@needs_clickhouse
+def test_api_root_cause_exposes_the_asof_sql(client: TestClient) -> None:
+    payload = client.get("/api/root-cause").json()
+    assert "ASOF LEFT JOIN" in payload["asof"]["sql"]
+    assert "lagInFrame" in payload["storms"]["sql"]
+
+
+@needs_clickhouse
+def test_api_scale_shows_the_farm_is_large(client: TestClient) -> None:
+    payload = client.get("/api/scale").json()
+    assert payload["samples"] > 100_000_000
+    assert payload["hosts"] > 0
+
+
+@needs_clickhouse
+def test_api_similar_matches_on_meaning(client: TestClient) -> None:
+    response = client.get(
+        "/api/similar", params={"q": "the card ran out of memory mid frame"}
+    )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["matches"], "the incident archive should return neighbours"
+    assert payload["matches"][0]["error_class"] == "oom"
+    assert payload["matches"][0]["similarity"] > 0.5
+
+
+@needs_clickhouse
+def test_api_rollup(client: TestClient) -> None:
+    payload = client.get("/api/rollup").json()
     assert payload["source"] == "clickhouse"
-    assert "toDate" in payload["sql"]
     assert payload["days"]
     assert {"day", "jobs", "cpu_hours", "gpu_hours"} <= set(payload["days"][0])
+    assert "farm_minute" in payload["timeline"]["sql"]
 
 
-@pytest.mark.skipif(
-    not credentials_ready(),
-    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
-)
+@needs_clickhouse
 def test_api_query_log(client: TestClient) -> None:
-    response = client.get("/api/query-log")
-    assert response.status_code == 200
-    payload = response.json()
+    payload = client.get("/api/query-log").json()
     assert payload["source"] == "system.query_log"
-    assert "query_log" in payload["sql"]
     assert "rows" in payload
+
+
+def test_decide_rejects_unknown_action(client: TestClient) -> None:
+    response = client.post(
+        "/api/proposals/decide",
+        json={"job_id": "job-zombie", "action": "delete_everything", "decision": "approved"},
+    )
+    assert response.status_code == 400
+
+
+def test_decide_rejects_unknown_decision(client: TestClient) -> None:
+    response = client.post(
+        "/api/proposals/decide",
+        json={"job_id": "job-zombie", "action": "kill_zombie", "decision": "maybe"},
+    )
+    assert response.status_code == 400

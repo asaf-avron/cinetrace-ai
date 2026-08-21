@@ -35,14 +35,22 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # min-instances=1 and no-cpu-throttling are both load-bearing:
+      # judging runs 23 Sep - 7 Oct, a cold start costs ~9s of a judge's
+      # patience, and the live farm ticker is a background task that stops dead
+      # if Cloud Run reclaims the CPU between requests.
       - name: Deploy Cloud Run
         run: |
           gcloud run deploy "${SERVICE}" \
             --source . \
             --project "${PROJECT_ID}" \
             --region "${REGION}" \
+            --min-instances=1 \
             --max-instances=1 \
-            --update-env-vars SUPERVISOR_RUN_PUBLIC=true \
+            --no-cpu-throttling \
+            --memory=2Gi \
+            --timeout=600 \
+            --update-env-vars SUPERVISOR_RUN_PUBLIC=true,LIVE_TICKER_ENABLED=true,DEMO_RESET_HOUR_UTC=6 \
             --quiet
           gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" \
