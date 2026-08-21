@@ -42,6 +42,7 @@ jobs:
             --project "${PROJECT_ID}" \
             --region "${REGION}" \
             --max-instances=1 \
+            --update-env-vars SUPERVISOR_RUN_PUBLIC=true \
             --quiet
           gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" \

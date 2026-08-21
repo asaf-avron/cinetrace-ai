@@ -74,7 +74,7 @@ Remote MCP `https://mcp.clickhouse.cloud/mcp` is enabled on the Cloud service fo
 - **Supervisor (Cloud Run, judge URL):** https://cinetrace-781071502822.us-central1.run.app
 - **Agents (Vertex Agent Engine):** `projects/cinetrace-ai/locations/us-central1/reasoningEngines/7649057753100451840` (same `root_agent`). Query: `https://us-central1-aiplatform.googleapis.com/v1/projects/cinetrace-ai/locations/us-central1/reasoningEngines/7649057753100451840:query`
 
-The page and job/proposal tables are public. **Run supervisor** spends Vertex credits: it requires a demo token (ask the team; do not commit it), is limited to 5 runs per hour, and always uses the fixed supervisor prompt. Set `SUPERVISOR_RUN_ENABLED=false` overnight.
+The page and job/proposal tables are public. Click **Run supervisor** to walk detect → decide → dry-run. Hosted judging week sets `SUPERVISOR_RUN_PUBLIC=true` so the token is not required; runs stay limited to 5 per hour and always use the fixed supervisor prompt. Set `SUPERVISOR_RUN_ENABLED=false` overnight.
 
 ClickHouse and `SUPERVISOR_RUN_TOKEN` live in Secret Manager. Wake the ClickHouse Cloud service before a demo so the first query does not time out.
 
@@ -91,7 +91,7 @@ The supervisor **Impact** card prices waste from live `render_jobs` rows (same s
 
 Each job gets one primary class (failed, zombie, idle queue, overrun) so the headline dollar total is not double-counted. Retry loops are tagged for the waste-summary counts and are not added again.
 
-On the committed eight-row seed, that is **$625.12** current waste (166.5 GPU-h + 352.0 CPU-h). **If proposals applied** subtracts waste for any `job_id` that already has a `remediation_proposals` row. These rates are a judge narrative, not a vendor quote.
+On the live seed (`now()`-relative timestamps, 62 jobs), Impact is computed from ClickHouse. The six named waste jobs still drive the dollars; extra farm rows are healthy traffic. The unit-test fixture for those six jobs alone is **$625.12**. After the larger seed, expect about **$623** before proposals (overrun baseline shifts slightly). **If proposals applied** subtracts waste for any `job_id` that already has a `remediation_proposals` row. These rates are a judge narrative, not a vendor quote.
 
 Set a [budget alert](https://console.cloud.google.com/billing) on the `cinetrace-ai` billing account (50% / 90% of the $100 credits). Do not raise Vertex quotas. The Agent Engine `:query` URL is IAM-only — do not grant `allUsers` and do not use it as the public demo.
 
@@ -127,14 +127,14 @@ Copyright 2026 Asaf Avron
 
 Deadline: **Sep 9, 2026 @ 2:00pm PDT**. Judging: implementation, design, impact, idea quality. ClickHouse track prizes: $7,500 / $4,500 / $3,000.
 
-This repo stays **private** until the board timing decision (target **~Sep 1**). Follow [docs/public-repo-checklist.md](docs/public-repo-checklist.md) to flip visibility, re-scan secrets, and paste the public URL on Devpost. Do **not** flip public from this README.
+This repo is **public** at `https://github.com/asaf-avron/cinetrace-ai`. Follow [docs/public-repo-checklist.md](docs/public-repo-checklist.md) only if you need to re-check secrets after a leak.
 
 Before submit:
 
-- [ ] Flip this repo from private to **public** (checklist above; not yet)
+- [x] Flip this repo from private to **public**
 - [x] Add a complete open-source license (`LICENSE` is Apache-2.0; confirm it appears in GitHub About after the public flip)
-- [ ] Prove Google Cloud and ClickHouse are used at runtime in code
-- [ ] Hosted project URL
+- [x] Prove Google Cloud and ClickHouse are used at runtime in code
+- [x] Hosted project URL
 - [ ] 3-minute **working demo** video (YouTube/Vimeo, English or English subtitles)
 - [ ] Complete the Devpost form and select the ClickHouse track
-- [ ] Replace the Devpost repository URL placeholder with `https://github.com/asaf-avron/cinetrace-ai` after the repo is public
+- [ ] Paste `https://github.com/asaf-avron/cinetrace-ai` as the Devpost repository URL

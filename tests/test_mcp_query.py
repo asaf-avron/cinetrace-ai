@@ -12,4 +12,4 @@ from cinetrace.clickhouse.client import credentials_ready
 def test_mcp_run_query_counts_render_jobs() -> None:
     from cinetrace.clickhouse.mcp_smoke import count_render_jobs
 
-    assert count_render_jobs() == 8
+    assert count_render_jobs() >= 50

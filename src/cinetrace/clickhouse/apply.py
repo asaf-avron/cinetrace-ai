@@ -10,10 +10,13 @@ SCHEMA_DIR = Path(__file__).resolve().parents[1] / "schema"
 
 
 def _statements(sql: str) -> list[str]:
+    cleaned = "\n".join(
+        line for line in sql.splitlines() if not line.strip().startswith("--")
+    )
     parts: list[str] = []
-    for chunk in sql.split(";"):
+    for chunk in cleaned.split(";"):
         statement = chunk.strip()
-        if statement and not statement.startswith("--"):
+        if statement:
             parts.append(statement)
     return parts
 

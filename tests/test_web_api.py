@@ -21,12 +21,17 @@ def test_index_page(client: TestClient) -> None:
     assert "If proposals applied" in response.text
     assert "Waste by category" in response.text
     assert "Sentinel queries" in response.text
+    assert "The three agents" in response.text
+    assert "kill render-farm waste" in response.text
 
 
 def test_health(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "run_public" in payload
+    assert "clickhouse" in payload
 
 
 @pytest.mark.skipif(
@@ -37,8 +42,15 @@ def test_api_jobs(client: TestClient) -> None:
     response = client.get("/api/jobs")
     assert response.status_code == 200
     jobs = response.json()["jobs"]
-    assert len(jobs) == 8
-    assert {job["job_id"] for job in jobs} >= {"job-fail-lic", "job-zombie"}
+    assert len(jobs) >= 50
+    assert {job["job_id"] for job in jobs} >= {
+        "job-fail-lic",
+        "job-zombie",
+        "job-fail-oom",
+        "job-retry-loop",
+        "job-idle-queue",
+        "job-overrun",
+    }
 
 
 @pytest.mark.skipif(
@@ -98,3 +110,17 @@ def test_api_waste(client: TestClient) -> None:
         "job-fail-lic",
         "job-retry-loop",
     }
+
+
+@pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
+def test_api_rollup(client: TestClient) -> None:
+    response = client.get("/api/rollup")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "clickhouse"
+    assert "toDate" in payload["sql"]
+    assert payload["days"]
+    assert {"day", "jobs", "cpu_hours", "gpu_hours"} <= set(payload["days"][0])

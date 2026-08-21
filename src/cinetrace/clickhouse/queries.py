@@ -53,6 +53,17 @@ CATEGORY_LABELS = {
 
 MCP_TOOLS = ("list_databases", "list_tables", "run_query")
 
+FARM_ROLLUP = """
+SELECT
+    toDate(coalesce(ended_at, started_at), 'UTC') AS day,
+    count() AS jobs,
+    round(sum(cpu_hours), 1) AS cpu_hours,
+    round(sum(gpu_hours), 1) AS gpu_hours
+FROM render_jobs
+GROUP BY day
+ORDER BY day
+"""
+
 
 def fetch_waste_showcase() -> dict:
     """Run the five Sentinel queries against live ClickHouse.
@@ -93,6 +104,23 @@ def fetch_waste_showcase() -> dict:
             ),
             "summary": summary,
             "queries": queries,
+        }
+    finally:
+        client.close()
+
+
+def fetch_farm_rollup() -> dict:
+    """Hours-by-day from live render_jobs (seed is now()-relative)."""
+    from cinetrace.clickhouse.client import get_client
+
+    client = get_client()
+    try:
+        result = client.query(FARM_ROLLUP.strip())
+        rows = [dict(zip(result.column_names, row)) for row in result.result_rows]
+        return {
+            "source": "clickhouse",
+            "sql": FARM_ROLLUP.strip(),
+            "days": rows,
         }
     finally:
         client.close()

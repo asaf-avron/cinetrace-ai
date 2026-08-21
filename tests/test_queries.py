@@ -17,6 +17,14 @@ def test_sentinel_instruction_includes_waste_sql() -> None:
     ]
 
 
+def test_farm_rollup_sql() -> None:
+    from cinetrace.clickhouse.queries import FARM_ROLLUP
+
+    assert "toDate" in FARM_ROLLUP
+    assert "cpu_hours" in FARM_ROLLUP
+    assert "gpu_hours" in FARM_ROLLUP
+
+
 def test_impact_sql_matches_sentinel_predicates() -> None:
     from cinetrace.clickhouse.impact import CLASSIFY_JOBS, HEALTHY_BASELINE
 

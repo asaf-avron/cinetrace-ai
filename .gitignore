@@ -40,3 +40,4 @@ Thumbs.db
 .agent_engine_temp/
 src/cinetrace_tmp*/
 *.log
+docs/demo/*.mp4

@@ -1,0 +1,28 @@
+1
+00:00:00,020 --> 00:00:18,550
+CineTrace AI is a VFX studio supervisor that kills render-farm compute waste.
+
+2
+00:00:18,600 --> 00:00:53,260
+Hosted supervisor on Cloud Run. Render jobs are live ClickHouse Cloud data — eight seed jobs, not mocks.
+
+3
+00:00:53,310 --> 00:01:17,150
+Diagnostic Sentinel calls ClickHouse through MCP run_query with exact SQL: failed, retry loops, idle queue, zombies, overruns.
+
+4
+00:01:17,200 --> 00:01:33,980
+Studio Orchestrator ranks waste. Action Agent writes dry-run remediation proposals into ClickHouse.
+
+5
+00:01:34,030 --> 00:02:06,710
+Run supervisor — Sentinel queries, Orchestrator decides, Action Agent persists dry-run rows.
+
+6
+00:02:06,760 --> 00:02:22,950
+Last run is the agent transcript. Proposals stay dry-run. Executed is no.
+
+7
+00:02:23,000 --> 00:02:31,070
+Three agents. Real ClickHouse via MCP. Gemini on Vertex Agent Engine.
+

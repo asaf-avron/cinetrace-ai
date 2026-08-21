@@ -3,25 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CineTrace AI — Studio Supervisor</title>
+  <title>CineTrace AI — kill render-farm waste</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <header>
     <div>
       <p class="eyebrow">CineTrace AI</p>
-      <h1>VFX farm supervisor</h1>
+      <h1>The studio supervisor that kills render-farm waste</h1>
+      <p class="lede">
+        Live ClickHouse telemetry. Three agents: Diagnostic Sentinel detects waste,
+        Studio Orchestrator decides, Action Agent dry-runs the fix.
+      </p>
     </div>
-    <p class="meta">Diagnostic Sentinel · Studio Orchestrator · Action Agent · ClickHouse via MCP</p>
+    <p class="meta">Gemini · Google Cloud ADK · ClickHouse MCP <code>run_query</code></p>
   </header>
 
   <section class="toolbar">
-    <label class="token">
+    <button id="run" type="button">Run supervisor</button>
+    <span id="status">Idle — page is public. Run spends Vertex credits.</span>
+    <label class="token" id="token-row" hidden>
       Demo token
       <input id="token" type="password" autocomplete="off" />
     </label>
-    <button id="run" type="button">Run supervisor</button>
-    <span id="status">Idle — page is public; Run spends Vertex credits and needs a token</span>
   </section>
 
   <section class="dashboard">
@@ -46,6 +53,29 @@
       <p class="waste-lead">Live counts from the five Diagnostic Sentinel queries</p>
       <div class="waste-grid" id="waste-summary"></div>
     </article>
+  </section>
+
+  <section class="timeline-section">
+    <h2>The three agents</h2>
+    <p class="panel-lead">Detect → decide → dry-run. Timeline fills after you run the supervisor.</p>
+    <ol class="agent-timeline" id="timeline">
+      <li class="timeline-empty">No supervisor run in this session.</li>
+    </ol>
+  </section>
+
+  <section id="farm-hours">
+    <h2>Farm hours</h2>
+    <p class="panel-lead">CPU and GPU hours by day from live <code>render_jobs</code>.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>day</th><th>jobs</th><th>cpu h</th><th>gpu h</th>
+          </tr>
+        </thead>
+        <tbody id="rollup"></tbody>
+      </table>
+    </div>
   </section>
 
   <section id="sentinel-queries">
@@ -85,11 +115,6 @@
         <tbody id="proposals"></tbody>
       </table>
     </div>
-  </section>
-
-  <section>
-    <h2>Last run</h2>
-    <pre id="summary">No supervisor run in this session.</pre>
   </section>
 
   <script src="/static/app.js"></script>

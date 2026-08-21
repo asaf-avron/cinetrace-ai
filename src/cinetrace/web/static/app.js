@@ -1,8 +1,9 @@
 const jobsBody = document.getElementById("jobs");
 const proposalsBody = document.getElementById("proposals");
-const summary = document.getElementById("summary");
+const timelineEl = document.getElementById("timeline");
 const status = document.getElementById("status");
 const runBtn = document.getElementById("run");
+const tokenRow = document.getElementById("token-row");
 const impactBefore = document.getElementById("impact-before");
 const impactAfter = document.getElementById("impact-after");
 const impactMeta = document.getElementById("impact-meta");
@@ -11,6 +12,10 @@ const impactNote = document.getElementById("impact-note");
 const wasteSummary = document.getElementById("waste-summary");
 const wasteQueries = document.getElementById("waste-queries");
 const wasteNote = document.getElementById("waste-note");
+const rollupBody = document.getElementById("rollup");
+
+let runPublic = false;
+let highlightedJobs = new Set();
 
 function money(value) {
   const n = Number(value);
@@ -28,7 +33,11 @@ function renderJobs(jobs) {
   jobsBody.replaceChildren();
   for (const job of jobs) {
     const tr = document.createElement("tr");
-    tr.className = job.status || "";
+    const classes = [job.status || ""];
+    if (highlightedJobs.has(String(job.job_id).toLowerCase())) {
+      classes.push("touched");
+    }
+    tr.className = classes.join(" ");
     tr.append(
       cell(job.job_id),
       cell(`${job.show} / ${job.shot}`),
@@ -143,50 +152,135 @@ function renderWaste(waste) {
   }
 }
 
+function renderRollup(rollup) {
+  if (!rollupBody) return;
+  rollupBody.replaceChildren();
+  const days = (rollup && rollup.days) || [];
+  if (!days.length) {
+    const tr = document.createElement("tr");
+    const td = cell("No farm hours yet");
+    td.colSpan = 4;
+    tr.append(td);
+    rollupBody.append(tr);
+    return;
+  }
+  for (const row of days) {
+    const tr = document.createElement("tr");
+    tr.append(
+      cell(row.day),
+      cell(row.jobs),
+      cell(row.cpu_hours),
+      cell(row.gpu_hours),
+    );
+    rollupBody.append(tr);
+  }
+}
+
+function renderTimeline(timeline) {
+  timelineEl.replaceChildren();
+  if (!timeline || !timeline.length) {
+    const li = document.createElement("li");
+    li.className = "timeline-empty";
+    li.textContent = "No supervisor run in this session.";
+    timelineEl.append(li);
+    return;
+  }
+  for (const step of timeline) {
+    const li = document.createElement("li");
+    li.className = `timeline-step ${step.agent || ""}`;
+    const head = document.createElement("p");
+    head.className = "timeline-agent";
+    head.textContent = `${step.label || step.author} · ${step.role || ""}`;
+    const body = document.createElement("p");
+    body.className = "timeline-text";
+    body.textContent = step.text || "";
+    li.append(head, body);
+    if (step.job_ids && step.job_ids.length) {
+      const jobs = document.createElement("p");
+      jobs.className = "timeline-jobs";
+      jobs.textContent = step.job_ids.join(" · ");
+      li.append(jobs);
+    }
+    timelineEl.append(li);
+  }
+}
+
+function applyRunResult(data) {
+  highlightedJobs = new Set(
+    (data.highlighted_job_ids || []).map((id) => String(id).toLowerCase()),
+  );
+  renderTimeline(data.timeline);
+  renderJobs(data.jobs);
+  renderProposals(data.proposals);
+  renderImpact(data.impact);
+  renderWaste(data.waste);
+  if (data.rollup) renderRollup(data.rollup);
+}
+
 async function refresh() {
-  const [jobsRes, propRes, impactRes, wasteRes] = await Promise.all([
+  const [healthRes, jobsRes, propRes, impactRes, wasteRes, rollupRes] = await Promise.all([
+    fetch("/api/health"),
     fetch("/api/jobs"),
     fetch("/api/proposals"),
     fetch("/api/impact"),
     fetch("/api/waste"),
+    fetch("/api/rollup"),
   ]);
-  if (!jobsRes.ok || !propRes.ok || !impactRes.ok || !wasteRes.ok) {
+  if (healthRes.ok) {
+    const health = await healthRes.json();
+    runPublic = Boolean(health.run_public);
+    tokenRow.hidden = runPublic;
+    status.textContent = runPublic
+      ? "Idle — judging mode. Run is open, limited to 5 per hour."
+      : "Idle — page is public. Run spends Vertex credits and needs a demo token.";
+  }
+  if (!jobsRes.ok || !propRes.ok || !impactRes.ok || !wasteRes.ok || !rollupRes.ok) {
     throw new Error("ClickHouse API failed. Check .env and that the service is awake.");
   }
   const jobs = await jobsRes.json();
   const proposals = await propRes.json();
   const impact = await impactRes.json();
   const waste = await wasteRes.json();
+  const rollup = await rollupRes.json();
   renderJobs(jobs.jobs);
   renderProposals(proposals.proposals);
   renderImpact(impact);
   renderWaste(waste);
+  renderRollup(rollup);
 }
 
 runBtn.addEventListener("click", async () => {
+  if (!runPublic && tokenRow.hidden) {
+    tokenRow.hidden = false;
+    document.getElementById("token").focus();
+    status.textContent = "Paste the demo token, then click Run supervisor again.";
+    return;
+  }
   runBtn.disabled = true;
   status.textContent = "Running detect → decide → dry-run…";
   try {
     const token = document.getElementById("token").value.trim();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["X-Run-Token"] = token;
     const res = await fetch("/api/run", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Run-Token": token,
-      },
+      headers,
       body: JSON.stringify({}),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Run failed");
-    summary.textContent = data.summary || "Run finished with no text.";
-    renderJobs(data.jobs);
-    renderProposals(data.proposals);
-    renderImpact(data.impact);
-    renderWaste(data.waste);
+    applyRunResult(data);
     status.textContent = "Done";
+    document.getElementById("timeline").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     status.textContent = err.message;
-    summary.textContent = String(err);
+    renderTimeline([{
+      agent: "orchestrator",
+      label: "Studio Orchestrator",
+      role: "error",
+      text: String(err),
+      job_ids: [],
+    }]);
   } finally {
     runBtn.disabled = false;
   }

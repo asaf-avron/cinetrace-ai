@@ -7,6 +7,10 @@ import time
 from hmac import compare_digest
 
 
+def _flag(name: str, default: str = "") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def run_enabled() -> bool:
     return os.getenv("SUPERVISOR_RUN_ENABLED", "true").strip().lower() not in {
         "0",
@@ -14,6 +18,11 @@ def run_enabled() -> bool:
         "no",
         "off",
     }
+
+
+def run_public() -> bool:
+    """Judging-week: skip the demo token, keep rate limit and enable flag."""
+    return _flag("SUPERVISOR_RUN_PUBLIC")
 
 
 def expected_token() -> str:
@@ -29,6 +38,8 @@ def extract_token(authorization: str | None, x_run_token: str | None) -> str:
 
 
 def token_ok(provided: str) -> bool:
+    if run_public():
+        return True
     expected = expected_token()
     if not expected or not provided or len(provided) != len(expected):
         return False
