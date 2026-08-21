@@ -18,13 +18,17 @@ def test_index_page(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Run supervisor" in response.text
     assert "Estimated waste" in response.text
-    assert "After recorded dry-runs" in response.text
+    assert "If proposals applied" in response.text
     assert "Waste by category" in response.text
     assert "Sentinel queries" in response.text
     assert "The three agents" in response.text
     assert "kill render-farm waste" in response.text
     assert "mcp-clickhouse" in response.text
     assert "farm-spark" in response.text
+    js = client.get("/static/app.js")
+    assert js.status_code == 200
+    assert "Recovered (dry-runs)" in js.text
+    assert "If proposals applied" in js.text
 
 
 def test_health(client: TestClient) -> None:
@@ -79,6 +83,8 @@ def test_api_impact(client: TestClient) -> None:
     job_ids = {row["job_id"] for row in payload["jobs"]}
     assert {"job-fail-lic", "job-zombie", "job-overrun", "job-idle-queue"} <= job_ids
     assert payload["assumptions"]["gpu_hour_usd"] == 3.5
+    assert payload["after_label"] in {"If proposals applied", "Recovered (dry-runs)"}
+    assert payload["recovery_state"] in {"none", "partial", "full"}
 
 
 @pytest.mark.skipif(

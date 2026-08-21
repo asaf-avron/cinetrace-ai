@@ -76,6 +76,9 @@ FROM remediation_proposals
 
 CATEGORY_ORDER = ("failed", "retry_loops", "idle_queue", "zombies", "overruns")
 
+AFTER_LABEL_OPEN = "If proposals applied"
+AFTER_LABEL_RECOVERED = "Recovered (dry-runs)"
+
 ASSUMPTIONS = {
     "gpu_hour_usd": GPU_HOUR_USD,
     "cpu_hour_usd": CPU_HOUR_USD,
@@ -196,6 +199,23 @@ def summarize_impact(
     before = _round_money(sum(row["waste_usd"] for row in waste_jobs))
     recovered_total = _round_money(sum(row["recovered_usd"] for row in waste_jobs))
     after = _round_money(before - recovered_total)
+    proposed_job_count = sum(1 for row in waste_jobs if row["has_proposal"])
+    if recovered_total <= 0:
+        recovery_state = "none"
+    elif after <= 0:
+        recovery_state = "full"
+    else:
+        recovery_state = "partial"
+    after_label = (
+        AFTER_LABEL_RECOVERED
+        if (
+            recovery_state == "full"
+            and waste_jobs
+            and proposed_job_count > 0
+            and recovered_total == before
+        )
+        else AFTER_LABEL_OPEN
+    )
 
     def _bucket(name: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -226,13 +246,10 @@ def summarize_impact(
         "waste_gpu_hours": _round_hours(sum(r["waste_gpu_hours"] for r in waste_jobs)),
         "job_count": len(priced),
         "waste_job_count": len(waste_jobs),
-        "proposed_job_count": sum(1 for r in waste_jobs if r["has_proposal"]),
+        "proposed_job_count": proposed_job_count,
         "open_usd": after,
-        "recovery_state": (
-            "none"
-            if recovered_total <= 0
-            else ("full" if after <= 0 else "partial")
-        ),
+        "recovery_state": recovery_state,
+        "after_label": after_label,
         "baseline": {
             "cpu_per_frame": round(baseline["cpu_per_frame"], 6),
             "gpu_per_frame": round(baseline["gpu_per_frame"], 6),

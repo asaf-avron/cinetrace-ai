@@ -6,6 +6,7 @@ const runBtn = document.getElementById("run");
 const tokenRow = document.getElementById("token-row");
 const impactBefore = document.getElementById("impact-before");
 const impactAfter = document.getElementById("impact-after");
+const impactAfterLabel = document.getElementById("impact-after-label");
 const impactMeta = document.getElementById("impact-meta");
 const impactCats = document.getElementById("impact-cats");
 const impactNote = document.getElementById("impact-note");
@@ -82,16 +83,21 @@ function renderImpact(impact) {
   if (!impact) return;
   impactBefore.textContent = money(impact.before_usd);
   impactAfter.textContent = money(impact.after_usd);
+  const state = impact.recovery_state || "none";
+  if (impactAfterLabel) {
+    impactAfterLabel.textContent =
+      impact.after_label ||
+      (state === "full" ? "Recovered (dry-runs)" : "If proposals applied");
+  }
   const gpu = Number(impact.waste_gpu_hours || 0).toFixed(1);
   const cpu = Number(impact.waste_cpu_hours || 0).toFixed(1);
   impactMeta.textContent =
     `${gpu} GPU-h + ${cpu} CPU-h waste · ${impact.waste_job_count} of ${impact.job_count} jobs · ` +
     `${money(impact.recovered_usd)} recovered by recorded dry-runs`;
   if (impactRecovery) {
-    const state = impact.recovery_state || "none";
     if (state === "full") {
       impactRecovery.textContent =
-        "All waste jobs already have dry-run proposals, so “after” is $0. That is recovered waste, not a healthy farm. Reset with: python -m cinetrace.clickhouse.reset_proposals";
+        "Recovered (dry-runs) — after is $0 because prior remediation_proposals cover every waste job, not because the farm is healthy. Reset with: python -m cinetrace.clickhouse.reset_proposals";
     } else if (state === "partial") {
       impactRecovery.textContent =
         `${money(impact.open_usd ?? impact.after_usd)} still open. Remaining jobs have no remediation_proposals row yet.`;

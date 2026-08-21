@@ -1,6 +1,8 @@
 """Impact calculator math against the committed seed rows. No ClickHouse required."""
 
 from cinetrace.clickhouse.impact import (
+    AFTER_LABEL_OPEN,
+    AFTER_LABEL_RECOVERED,
     CPU_HOUR_USD,
     GPU_HOUR_USD,
     healthy_baseline,
@@ -124,6 +126,7 @@ def test_seed_waste_dollars() -> None:
     assert impact["recovered_usd"] == 0
     assert impact["recovery_state"] == "none"
     assert impact["open_usd"] == 625.12
+    assert impact["after_label"] == AFTER_LABEL_OPEN
     assert impact["waste_gpu_hours"] == 166.536
     assert impact["assumptions"]["gpu_hour_usd"] == GPU_HOUR_USD
     assert impact["assumptions"]["cpu_hour_usd"] == CPU_HOUR_USD
@@ -146,6 +149,27 @@ def test_before_after_when_proposals_applied() -> None:
     assert impact["proposed_job_count"] == 3
     assert impact["recovery_state"] == "partial"
     assert impact["open_usd"] == 416.88
+    assert impact["after_label"] == AFTER_LABEL_OPEN
+
+
+def test_full_recovery_is_not_a_healthy_farm() -> None:
+    waste_ids = {job["job_id"] for job in SEED_JOBS if job["waste_class"] != "healthy"}
+    impact = summarize_impact(SEED_JOBS, waste_ids)
+    assert waste_ids == {
+        "job-fail-oom",
+        "job-fail-lic",
+        "job-retry-loop",
+        "job-idle-queue",
+        "job-zombie",
+        "job-overrun",
+    }
+    assert impact["waste_job_count"] == 6
+    assert impact["proposed_job_count"] == 6
+    assert impact["after_usd"] == 0
+    assert impact["recovered_usd"] == impact["before_usd"] == 625.12
+    assert impact["recovery_state"] == "full"
+    assert impact["open_usd"] == 0
+    assert impact["after_label"] == AFTER_LABEL_RECOVERED
 
 
 def test_hours_to_usd_uses_documented_rates() -> None:
