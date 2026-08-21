@@ -272,6 +272,8 @@ function renderQueryLog(log) {
   }
 }
 
+const TIMELINE_AGENTS = new Set(["sentinel", "orchestrator", "action"]);
+
 function renderTimeline(timeline) {
   timelineEl.replaceChildren();
   if (!timeline || !timeline.length) {
@@ -282,20 +284,35 @@ function renderTimeline(timeline) {
     return;
   }
   for (const step of timeline) {
+    if (step.agent && !TIMELINE_AGENTS.has(step.agent)) continue;
     const li = document.createElement("li");
     li.className = `timeline-step ${step.agent || ""}`;
     const head = document.createElement("p");
     head.className = "timeline-agent";
     head.textContent = `${step.label || step.author} · ${step.role || ""}`;
+    const full = step.text || "";
+    const summary = step.summary || full;
+    const truncated = Boolean(step.truncated) || (full && summary !== full);
     const body = document.createElement("p");
     body.className = "timeline-text";
-    body.textContent = step.text || "";
+    body.textContent = summary;
     li.append(head, body);
     if (step.job_ids && step.job_ids.length) {
       const jobs = document.createElement("p");
       jobs.className = "timeline-jobs";
       jobs.textContent = step.job_ids.join(" · ");
       li.append(jobs);
+    }
+    if (truncated && full) {
+      const details = document.createElement("details");
+      details.className = "timeline-full";
+      const control = document.createElement("summary");
+      control.textContent = "Show full";
+      const fullBody = document.createElement("p");
+      fullBody.className = "timeline-text-full";
+      fullBody.textContent = full;
+      details.append(control, fullBody);
+      li.append(details);
     }
     timelineEl.append(li);
   }
