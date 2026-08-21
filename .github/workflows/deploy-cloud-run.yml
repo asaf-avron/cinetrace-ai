@@ -1,0 +1,49 @@
+name: Deploy Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - ".github/workflows/deploy-cloud-run.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: cinetrace-ai
+  REGION: us-central1
+  SERVICE: cinetrace
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --source . \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --max-instances=1 \
+            --quiet
+          gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)'

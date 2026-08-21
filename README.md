@@ -95,10 +95,25 @@ On the committed eight-row seed, that is **$625.12** current waste (166.5 GPU-h 
 
 Set a [budget alert](https://console.cloud.google.com/billing) on the `cinetrace-ai` billing account (50% / 90% of the $100 credits). Do not raise Vertex quotas. The Agent Engine `:query` URL is IAM-only — do not grant `allUsers` and do not use it as the public demo.
 
-Redeploy Cloud Run after code changes:
+Redeploy Cloud Run after code changes via **GitHub Actions** (Workload Identity Federation — CIN agents never hold GCP credentials). Push to `main` (src, Dockerfile, pyproject, or the workflow file) or **Actions → Deploy Cloud Run → Run workflow**.
+
+One-time WIF bootstrap from a laptop already logged into `gcloud` (not from Oracle):
+
+```bash
+bash scripts/gcp/setup-github-wif.sh
+gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --repo asaf-avron/cinetrace-ai --body '<provider resource name printed by the script>'
+gh variable set GCP_SERVICE_ACCOUNT --repo asaf-avron/cinetrace-ai --body 'cinetrace-github-deploy@cinetrace-ai.iam.gserviceaccount.com'
+```
+
+Secret Manager values still come from this laptop when they change:
 
 ```bash
 uv run python scripts/sync_secrets.py
+```
+
+Local fallback (optional):
+
+```bash
 gcloud run deploy cinetrace --source . --project=cinetrace-ai --region=us-central1 --max-instances=1 --quiet
 ```
 
