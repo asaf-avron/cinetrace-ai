@@ -3,120 +3,231 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CineTrace AI — kill render-farm waste</title>
+  <title>CineTrace AI — protect the dailies</title>
+  <meta name="description" content="Autonomous VFX studio supervisor. Three Gemini agents on Google Cloud ADK read 235M rows of render-farm telemetry in ClickHouse to stop compute waste before it costs a review." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header>
-    <div>
+  <header class="masthead">
+    <div class="masthead-copy">
       <p class="eyebrow">CineTrace AI</p>
-      <h1>The studio supervisor that kills render-farm waste</h1>
+      <h1>The studio supervisor that protects the dailies</h1>
       <p class="lede">
-        Live ClickHouse telemetry. Three agents: Diagnostic Sentinel detects waste,
-        Studio Orchestrator decides, Action Agent dry-runs the fix.
+        Render-farm waste is not a billing problem, it is a delivery problem. Three
+        Gemini agents read the farm's telemetry in ClickHouse, prove why capacity is
+        being burned, and propose the fix that saves the review.
+      </p>
+      <p class="meta">
+        Gemini &middot; Google Cloud ADK &middot; Vertex Agent Engine &middot;
+        ClickHouse via <code>mcp-clickhouse</code>
       </p>
     </div>
-    <p class="meta">Gemini · Google Cloud ADK · ClickHouse MCP <code>run_query</code></p>
+    <div class="live-pill" id="live-pill" data-state="idle">
+      <span class="live-dot"></span>
+      <span id="live-label">connecting to farm</span>
+    </div>
   </header>
+
+  <section class="scale-strip" id="scale-strip" aria-label="Farm scale">
+    <div class="scale-item"><span class="scale-value" id="scale-samples">—</span><span class="scale-label">frame samples</span></div>
+    <div class="scale-item"><span class="scale-value" id="scale-jobs">—</span><span class="scale-label">render jobs</span></div>
+    <div class="scale-item"><span class="scale-value" id="scale-hosts">—</span><span class="scale-label">render hosts</span></div>
+    <div class="scale-item"><span class="scale-value" id="scale-days">—</span><span class="scale-label">days of history</span></div>
+    <div class="scale-item"><span class="scale-value" id="scale-size">—</span><span class="scale-label">on disk</span></div>
+    <div class="scale-item"><span class="scale-value" id="scale-rollup">—</span><span class="scale-label">rollup rows (MV)</span></div>
+  </section>
+
+  <section class="hero" id="dailies">
+    <div class="hero-head">
+      <div>
+        <h2>Dailies at risk</h2>
+        <p class="panel-lead" id="dailies-lead">Projecting the shot queue against each show's review time…</p>
+      </div>
+      <div class="hero-numbers">
+        <div class="hero-stat risk">
+          <span class="hero-value" id="shots-at-risk">—</span>
+          <span class="hero-label">shots will miss review</span>
+        </div>
+        <div class="hero-stat save">
+          <span class="hero-value" id="shots-recoverable">—</span>
+          <span class="hero-label">recoverable by freeing stuck slots</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-value" id="slots-stuck">—</span>
+          <span class="hero-label">GPU slots held by zombies &amp; idle queue</span>
+        </div>
+      </div>
+    </div>
+    <div class="shot-cards" id="shot-cards"></div>
+    <details class="sql-drop">
+      <summary>The SQL behind this <span class="stat-badge" id="shots-stats"></span></summary>
+      <pre><code id="shots-sql"></code></pre>
+    </details>
+  </section>
 
   <section class="toolbar">
     <button id="run" type="button">Run supervisor</button>
-    <span id="status">Idle — page is public. Run spends Vertex credits.</span>
+    <span id="status">Idle. A run calls Gemini on Vertex and spends credits.</span>
     <label class="token" id="token-row" hidden>
       Demo token
       <input id="token" type="password" autocomplete="off" />
     </label>
+    <span class="cost-meter" id="cost-meter" hidden></span>
   </section>
 
-  <section class="dashboard">
+  <section class="dashboard" id="impact-row">
     <article class="card impact" id="impact">
       <h2>Impact</h2>
       <div class="impact-hero">
         <div>
-          <p class="impact-label">Estimated waste</p>
-          <p class="impact-usd" id="impact-before">—</p>
+          <p class="impact-label">Burning right now</p>
+          <p class="impact-usd" id="impact-open">—</p>
+          <p class="impact-sub" id="impact-open-sub"></p>
         </div>
         <div>
-          <p class="impact-label">After recorded dry-runs</p>
-          <p class="impact-usd after" id="impact-after">—</p>
+          <p class="impact-label">Recovered by approval</p>
+          <p class="impact-usd after" id="impact-approved">—</p>
+          <p class="impact-sub" id="impact-approved-sub"></p>
         </div>
       </div>
-      <p class="impact-meta" id="impact-meta">Loading seed telemetry…</p>
-      <p class="impact-recovery" id="impact-recovery"></p>
-      <ul class="impact-cats" id="impact-cats"></ul>
+      <div class="impact-history">
+        <p class="impact-label">Same pricing over the farm's full history</p>
+        <p class="impact-history-usd"><span id="impact-history">—</span> <span class="impact-history-unit">in 90 days</span></p>
+        <p class="impact-sub" id="impact-history-sub"></p>
+      </div>
       <p class="impact-note" id="impact-note"></p>
     </article>
+
     <article class="card waste" id="waste">
       <h2>Waste by category</h2>
-      <p class="waste-lead">Live counts from the five Diagnostic Sentinel queries</p>
+      <p class="waste-lead">Live counts from the deterministic detection layer</p>
       <div class="waste-grid" id="waste-summary"></div>
     </article>
   </section>
 
-  <section class="timeline-section">
+  <section class="timeline-section" id="agents">
     <h2>The three agents</h2>
-    <p class="panel-lead">Detect → decide → dry-run. Timeline fills after you run the supervisor.</p>
+    <p class="panel-lead">
+      Detect &rarr; decide &rarr; dry-run, in that order every time. The pipeline is an
+      ADK <code>SequentialAgent</code>, so no stage can be skipped; the reasoning inside
+      each stage is the model's.
+    </p>
     <ol class="agent-timeline" id="timeline">
       <li class="timeline-empty">No supervisor run in this session.</li>
     </ol>
     <div class="mcp-evidence" id="mcp-evidence">
-      <h3>This run · mcp-clickhouse</h3>
-      <p class="panel-lead" id="mcp-note">Click Run to capture Sentinel <code>run_query</code> calls from the ADK loop.</p>
+      <h3>This run &middot; SQL the Sentinel wrote itself</h3>
+      <p class="panel-lead" id="mcp-note">
+        The Sentinel is given the schema and the goal, not a list of queries. Run the
+        supervisor to capture the <code>run_query</code> calls it composed.
+      </p>
       <ul id="mcp-calls"></ul>
     </div>
   </section>
 
-  <section id="farm-hours">
-    <h2>Farm hours</h2>
-    <p class="panel-lead">CPU and GPU hours by day from live <code>render_jobs</code>.</p>
-    <div class="farm-spark" id="farm-spark" aria-hidden="true"></div>
+  <section id="root-cause">
+    <h2>Root cause</h2>
+    <p class="panel-lead">
+      <code>ASOF LEFT JOIN</code> pairs every OOM failure with the nearest telemetry
+      sample recorded before it died. No other engine expresses "the row just before
+      this moment" in one join, and pulling 235M samples into Python to find it is not
+      an option.
+    </p>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr>
-            <th>day</th><th>jobs</th><th>cpu h</th><th>gpu h</th>
-          </tr>
+          <tr><th>job</th><th>show / shot</th><th>host</th><th>VRAM at death</th><th>lead time</th><th>frame</th></tr>
         </thead>
-        <tbody id="rollup"></tbody>
+        <tbody id="asof-rows"></tbody>
+      </table>
+    </div>
+    <details class="sql-drop">
+      <summary>The SQL behind this <span class="stat-badge" id="asof-stats"></span></summary>
+      <pre><code id="asof-sql"></code></pre>
+    </details>
+
+    <h3>Repeat failures per host</h3>
+    <p class="panel-lead">
+      <code>lagInFrame</code> over failures partitioned by host. Two failures inside 90
+      minutes on the same node is a node problem, not six unlucky jobs.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>host</th><th>show</th><th>job</th><th>error</th><th>gap</th></tr></thead>
+        <tbody id="storm-rows"></tbody>
       </table>
     </div>
   </section>
 
+  <section id="recall">
+    <h2>Have we seen this before?</h2>
+    <p class="panel-lead">
+      Error text is embedded with Vertex AI <code>text-embedding-005</code>; the archive
+      of past incidents lives in ClickHouse and is searched by
+      <code>cosineDistance</code>. It matches meaning, so a description that shares no
+      keywords with the original ticket still finds it.
+    </p>
+    <form class="recall-form" id="recall-form">
+      <input id="recall-input" type="text" maxlength="240"
+             value="the render died because the graphics card ran out of memory near the end of the frame" />
+      <button type="submit">Search the archive</button>
+    </form>
+    <p class="panel-lead"><span class="stat-badge" id="recall-stats"></span></p>
+    <ul class="recall-results" id="recall-results"></ul>
+  </section>
+
   <section id="sentinel-queries">
-    <h2>Sentinel queries</h2>
+    <h2>Detection layer</h2>
     <p class="panel-lead" id="waste-note">
-      Exact SQL the Diagnostic Sentinel runs via MCP <code>run_query</code>.
-      Results are live from the same ClickHouse service.
+      Five deterministic queries over the <code>job_waste</code> view. Thresholds are
+      per-cohort <code>quantileTDigest</code> fences, not constants: a job is an overrun
+      relative to other jobs on the same show and renderer, never at a fixed hour count.
     </p>
     <div id="waste-queries"></div>
+
     <article class="query-panel" id="query-log-panel">
       <header>
         <h3>ClickHouse query_log</h3>
         <span class="query-count" id="query-log-badge">live cluster</span>
       </header>
-      <p class="panel-lead" id="query-log-note">Recent queries that touched <code>render_jobs</code> on this service.</p>
+      <p class="panel-lead" id="query-log-note">Recent queries on this service that touched the farm tables.</p>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr><th>when</th><th>user</th><th>query</th></tr>
-          </thead>
+          <thead><tr><th>when</th><th>user</th><th>rows read</th><th>ms</th><th>query</th></tr></thead>
           <tbody id="query-log"></tbody>
         </table>
       </div>
     </article>
   </section>
 
+  <section id="farm-hours">
+    <h2>Farm activity</h2>
+    <p class="panel-lead">
+      Served from <code>farm_minute</code>, an <code>AggregatingMergeTree</code> kept
+      current by a materialized view. The 235M-row fact table is never touched by this
+      chart. <span class="stat-badge" id="timeline-stats"></span>
+    </p>
+    <div class="farm-spark" id="farm-spark" aria-hidden="true"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>day</th><th>jobs</th><th>cpu h</th><th>gpu h</th></tr></thead>
+        <tbody id="rollup"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section>
-    <h2>Render jobs</h2>
+    <h2>Live farm</h2>
+    <p class="panel-lead">Open waste first, then the freshest activity. 198k jobs in the table; these are the ones that matter.</p>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>job</th><th>show / shot</th><th>status</th><th>error</th>
-            <th>retries</th><th>queue s</th><th>cpu h</th><th>gpu h</th><th>frames</th>
+            <th>job</th><th>show / shot</th><th>status</th><th>class</th><th>error</th>
+            <th>retries</th><th>cpu h</th><th>gpu h</th><th>frames</th><th>waste</th>
           </tr>
         </thead>
         <tbody id="jobs"></tbody>
@@ -124,20 +235,32 @@
     </div>
   </section>
 
-  <section>
+  <section id="proposals-section">
     <h2>Remediation proposals</h2>
+    <p class="panel-lead">
+      Every proposal is dry-run and append-only. Nothing reaches a render host until a
+      human approves it here &mdash; and the Impact card only credits a saving once you do.
+    </p>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>when</th><th>job</th><th>action</th><th>status</th>
-            <th>mode</th><th>executed</th><th>reason / outcome</th>
+            <th>when</th><th>job</th><th>action</th><th>protects</th>
+            <th>evidence</th><th>decision</th><th></th>
           </tr>
         </thead>
         <tbody id="proposals"></tbody>
       </table>
     </div>
   </section>
+
+  <footer class="page-footer">
+    <p>
+      CineTrace AI &middot; Gemini on Vertex AI Agent Engine &middot; ClickHouse Cloud via
+      the official <code>mcp-clickhouse</code> server &middot;
+      <a href="https://github.com/asaf-avron/cinetrace-ai">source</a>
+    </p>
+  </footer>
 
   <script src="/static/app.js"></script>
 </body>

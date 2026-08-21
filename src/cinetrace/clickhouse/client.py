@@ -45,6 +45,11 @@ def get_client() -> Client:
         database=os.getenv("CLICKHOUSE_DATABASE", "default"),
         secure=_truthy(os.getenv("CLICKHOUSE_SECURE"), True),
         verify=_truthy(os.getenv("CLICKHOUSE_VERIFY"), True),
+        # Read-after-write. On ClickHouse Cloud the write and the next read can
+        # land on different replicas, so without this a supervisor approves a
+        # proposal, the page refetches, and the impact figure has not moved --
+        # the one interaction the product is built around, silently broken.
+        settings={"select_sequential_consistency": 1},
     )
 
 

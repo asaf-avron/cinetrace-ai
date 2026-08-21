@@ -1,152 +1,89 @@
-"""Impact calculator math against the committed seed rows. No ClickHouse required."""
+"""Impact pricing. The arithmetic now lives in ClickHouse, so this checks the
+rate model and the SQL contract rather than re-implementing the sums in Python.
+"""
 
+import pytest
+
+from cinetrace.clickhouse.client import credentials_ready
 from cinetrace.clickhouse.impact import (
+    ASSUMPTIONS,
+    CATEGORIES,
     CPU_HOUR_USD,
     GPU_HOUR_USD,
-    healthy_baseline,
+    TOP_OPEN,
+    TOTALS,
     hours_to_usd,
-    summarize_impact,
 )
 
-# Mirrors src/cinetrace/schema/seed.sql. waste_class matches the live SQL predicates.
-SEED_JOBS = [
-    {
-        "job_id": "job-ok-001",
-        "show": "NEBULA",
-        "shot": "sh010",
-        "status": "completed",
-        "retry_count": 0,
-        "cpu_hours": 12.4,
-        "gpu_hours": 6.1,
-        "queue_wait_seconds": 90,
-        "frames_done": 120,
-        "waste_class": "healthy",
-    },
-    {
-        "job_id": "job-ok-002",
-        "show": "NEBULA",
-        "shot": "sh020",
-        "status": "completed",
-        "retry_count": 1,
-        "cpu_hours": 18.0,
-        "gpu_hours": 0,
-        "queue_wait_seconds": 120,
-        "frames_done": 80,
-        "waste_class": "healthy",
-    },
-    {
-        "job_id": "job-fail-oom",
-        "show": "NEBULA",
-        "shot": "sh040",
-        "status": "failed",
-        "retry_count": 4,
-        "cpu_hours": 2.1,
-        "gpu_hours": 1.8,
-        "queue_wait_seconds": 45,
-        "frames_done": 12,
-        "waste_class": "failed",
-    },
-    {
-        "job_id": "job-fail-lic",
-        "show": "AURORA",
-        "shot": "sh015",
-        "status": "failed",
-        "retry_count": 6,
-        "cpu_hours": 0.2,
-        "gpu_hours": 0.2,
-        "queue_wait_seconds": 30,
-        "frames_done": 0,
-        "waste_class": "failed",
-    },
-    {
-        "job_id": "job-retry-loop",
-        "show": "AURORA",
-        "shot": "sh030",
-        "status": "failed",
-        "retry_count": 8,
-        "cpu_hours": 41.0,
-        "gpu_hours": 0,
-        "queue_wait_seconds": 600,
-        "frames_done": 40,
-        "waste_class": "failed",
-    },
-    {
-        "job_id": "job-idle-queue",
-        "show": "ORBIT",
-        "shot": "sh050",
-        "status": "queued",
-        "retry_count": 0,
-        "cpu_hours": 0,
-        "gpu_hours": 0,
-        "queue_wait_seconds": 28800,
-        "frames_done": 0,
-        "waste_class": "idle_queue",
-    },
-    {
-        "job_id": "job-zombie",
-        "show": "ORBIT",
-        "shot": "sh080",
-        "status": "running",
-        "retry_count": 2,
-        "cpu_hours": 96.0,
-        "gpu_hours": 48.0,
-        "queue_wait_seconds": 20,
-        "frames_done": 18,
-        "waste_class": "zombie",
-    },
-    {
-        "job_id": "job-overrun",
-        "show": "NEBULA",
-        "shot": "sh090",
-        "status": "completed",
-        "retry_count": 0,
-        "cpu_hours": 220.0,
-        "gpu_hours": 110.0,
-        "queue_wait_seconds": 180,
-        "frames_done": 48,
-        "waste_class": "overrun",
-    },
-]
+needs_clickhouse = pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
 
 
-def test_healthy_baseline_from_seed() -> None:
-    base = healthy_baseline(SEED_JOBS)
-    assert base["cpu_per_frame"] == 30.4 / 200
-    assert base["gpu_per_frame"] == 6.1 / 200
+def test_rates_are_the_documented_ones() -> None:
+    assert GPU_HOUR_USD == 3.50
+    assert CPU_HOUR_USD == 0.12
+    assert ASSUMPTIONS["gpu_hour_usd"] == 3.50
+    assert "tDigest" in ASSUMPTIONS["overrun_baseline"]
+    assert "approves" in ASSUMPTIONS["recovery"]
 
 
-def test_seed_waste_dollars() -> None:
-    impact = summarize_impact(SEED_JOBS, set())
-    assert impact["job_count"] == 8
-    assert impact["waste_job_count"] == 6
-    assert impact["before_usd"] == 625.12
-    assert impact["after_usd"] == 625.12
-    assert impact["recovered_usd"] == 0
-    assert impact["recovery_state"] == "none"
-    assert impact["open_usd"] == 625.12
-    assert impact["waste_gpu_hours"] == 166.536
-    assert impact["assumptions"]["gpu_hour_usd"] == GPU_HOUR_USD
-    assert impact["assumptions"]["cpu_hour_usd"] == CPU_HOUR_USD
-
-    by_cat = {row["category"]: row for row in impact["categories"]}
-    assert by_cat["failed"]["job_count"] == 3
-    assert by_cat["failed"]["waste_usd"] == 12.20
-    assert by_cat["retry_loops"]["job_count"] == 3
-    assert by_cat["idle_queue"]["waste_usd"] == 28.00
-    assert by_cat["zombies"]["waste_usd"] == 179.52
-    assert by_cat["overruns"]["waste_usd"] == 405.40
+def test_hours_price_at_the_stated_rates() -> None:
+    assert hours_to_usd(0, 10) == pytest.approx(35.0)
+    assert hours_to_usd(100, 0) == pytest.approx(12.0)
+    assert hours_to_usd(96, 48) == pytest.approx(96 * 0.12 + 48 * 3.50)
 
 
-def test_before_after_when_proposals_applied() -> None:
-    proposed = {"job-zombie", "job-idle-queue", "job-fail-lic"}
-    impact = summarize_impact(SEED_JOBS, proposed)
-    assert impact["recovered_usd"] == 208.24
-    assert impact["after_usd"] == 416.88
-    assert impact["before_usd"] == 625.12
-    assert impact["proposed_job_count"] == 3
-    assert impact["recovery_state"] == "partial"
-    assert impact["open_usd"] == 416.88
+def test_totals_sql_aggregates_on_the_cluster() -> None:
+    """No SELECT of individual jobs: 198k rows must never cross the wire."""
+    assert "FROM job_waste" in TOTALS
+    assert "sumIf" in TOTALS
+    assert "is_open" in TOTALS
+    # Recovery is credited on approval, not on the agent filing a proposal.
+    assert "decision = 'approved'" in TOTALS
+    assert "decision = 'pending'" in TOTALS
 
 
-def test_hours_to_usd_uses_documented_rates() -> None:
-    assert hours_to_usd(1, 1) == CPU_HOUR_USD + GPU_HOUR_USD
+def test_category_aliases_do_not_shadow_aggregated_columns() -> None:
+    """ClickHouse rejects sum(x) AS x when another aggregate also reads x."""
+    assert "AS cpu_hours_total" in CATEGORIES
+    assert "AS gpu_hours_total" in CATEGORIES
+    assert "AS waste_cpu_hours" not in CATEGORIES
+
+
+def test_top_open_is_bounded() -> None:
+    assert "LIMIT {limit:UInt32}" in TOP_OPEN
+    assert "WHERE w.is_open" in TOP_OPEN
+
+
+@needs_clickhouse
+def test_live_impact_shape() -> None:
+    from cinetrace.clickhouse.impact import fetch_impact
+
+    impact = fetch_impact(top_n=5)
+    open_now = impact["open"]
+    history = impact["historical"]
+
+    assert history["total_jobs"] > 100_000, "the farm should be at studio scale"
+    assert history["usd"] > open_now["usd"], "90 days must exceed what is open now"
+    assert open_now["remaining_usd"] == pytest.approx(
+        open_now["usd"] - open_now["approved_usd"], abs=0.02
+    )
+    assert len(impact["top_jobs"]) <= 5
+    assert {c["category"] for c in impact["categories"]} == {
+        "failed", "retry_loops", "idle_queue", "zombies", "overruns",
+    }
+
+
+@needs_clickhouse
+def test_overruns_are_never_counted_as_open() -> None:
+    """A completed job's hours are spent; no action reclaims them."""
+    from cinetrace.clickhouse.impact import fetch_impact
+
+    overruns = next(
+        c for c in fetch_impact()["categories"] if c["category"] == "overruns"
+    )
+    assert overruns["open_count"] == 0
+    assert overruns["open_usd"] == 0.0
+    assert overruns["waste_usd"] > 0, "they should still show in the 90-day total"
