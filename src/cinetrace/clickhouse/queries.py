@@ -126,36 +126,78 @@ def fetch_farm_rollup() -> dict:
         client.close()
 
 
-QUERY_LOG = """
+QUERY_LOG_COST_COLUMNS = ("query_duration_ms", "read_rows", "result_rows")
+
+
+def query_log_sql(cost_columns: tuple[str, ...] = QUERY_LOG_COST_COLUMNS) -> str:
+    extras = "".join(f"    {column},\n" for column in cost_columns)
+    return f"""
 SELECT
     event_time,
     user,
-    substring(query, 1, 360) AS query
+{extras}    substring(query, 1, 360) AS query
 FROM system.query_log
 WHERE type = 'QueryFinish'
   AND positionCaseInsensitive(query, 'render_jobs') > 0
 ORDER BY event_time DESC
 LIMIT 12
-"""
+""".strip()
+
+
+QUERY_LOG = query_log_sql()
+
+
+def _query_log_result_rows(client, sql: str) -> list[dict]:
+    result = client.query(sql)
+    return [dict(zip(result.column_names, row)) for row in result.result_rows]
+
+
+def _present_query_log_cost_columns(client) -> tuple[str, ...]:
+    names = ", ".join(f"'{column}'" for column in QUERY_LOG_COST_COLUMNS)
+    try:
+        result = client.query(
+            "SELECT name FROM system.columns "
+            "WHERE database = 'system' AND table = 'query_log' "
+            f"AND name IN ({names})"
+        )
+        found = {row[0] for row in result.result_rows}
+        return tuple(column for column in QUERY_LOG_COST_COLUMNS if column in found)
+    except Exception:  # noqa: BLE001 — Cloud may deny system tables
+        return ()
+
+
+def _fetch_query_log_rows(client) -> list[dict]:
+    try:
+        return _query_log_result_rows(client, QUERY_LOG)
+    except Exception:
+        pass
+    present = _present_query_log_cost_columns(client)
+    if present:
+        try:
+            return _query_log_result_rows(client, query_log_sql(present))
+        except Exception:
+            pass
+    return _query_log_result_rows(client, query_log_sql(()))
 
 
 def fetch_query_log() -> dict:
     """Recent ClickHouse query_log rows that touched render_jobs.
 
-    Best-effort proof the cluster ran the Sentinel SQL. Cloud permissions may
-    deny system.query_log; the UI then shows the HTTPS showcase only.
+    Best-effort proof the cluster ran the Sentinel SQL. Prefers native cost
+    columns (query_duration_ms, read_rows, result_rows) and omits any that
+    this Cloud service does not expose. Permissions may still deny
+    system.query_log entirely; the UI then shows the HTTPS showcase only.
     """
     from cinetrace.clickhouse.client import get_client
 
     client = None
     try:
         client = get_client()
-        result = client.query(QUERY_LOG.strip())
-        rows = [dict(zip(result.column_names, row)) for row in result.result_rows]
+        rows = _fetch_query_log_rows(client)
         return {
             "ok": True,
             "source": "system.query_log",
-            "sql": QUERY_LOG.strip(),
+            "sql": QUERY_LOG,
             "rows": rows,
             "note": "Live query_log on this ClickHouse service (same cluster MCP uses).",
         }
@@ -163,7 +205,7 @@ def fetch_query_log() -> dict:
         return {
             "ok": False,
             "source": "system.query_log",
-            "sql": QUERY_LOG.strip(),
+            "sql": QUERY_LOG,
             "rows": [],
             "note": (
                 f"query_log unavailable ({type(exc).__name__}). "

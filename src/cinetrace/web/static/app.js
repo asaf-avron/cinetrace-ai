@@ -260,16 +260,30 @@ function renderQueryLog(log) {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = cell(log && log.ok === false ? "No query_log access on this service" : "No recent render_jobs queries");
-    td.colSpan = 3;
+    td.colSpan = 6;
     tr.append(td);
     queryLogBody.append(tr);
     return;
   }
   for (const row of rows) {
     const tr = document.createElement("tr");
-    tr.append(cell(row.event_time), cell(row.user), cell(row.query));
+    tr.append(
+      cell(row.event_time),
+      cell(row.user),
+      cell(formatQueryLogNumber(row.query_duration_ms)),
+      cell(formatQueryLogNumber(row.read_rows)),
+      cell(formatQueryLogNumber(row.result_rows)),
+      cell(row.query),
+    );
     queryLogBody.append(tr);
   }
+}
+
+function formatQueryLogNumber(value) {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return n.toLocaleString("en-US");
 }
 
 function renderTimeline(timeline) {

@@ -25,6 +25,14 @@ def test_index_page(client: TestClient) -> None:
     assert "kill render-farm waste" in response.text
     assert "mcp-clickhouse" in response.text
     assert "farm-spark" in response.text
+    assert "query_duration_ms" in response.text
+    assert "read_rows" in response.text
+    assert "result_rows" in response.text
+    js = client.get("/static/app.js")
+    assert js.status_code == 200
+    assert "query_duration_ms" in js.text
+    assert "read_rows" in js.text
+    assert "result_rows" in js.text
 
 
 def test_health(client: TestClient) -> None:
@@ -138,4 +146,12 @@ def test_api_query_log(client: TestClient) -> None:
     payload = response.json()
     assert payload["source"] == "system.query_log"
     assert "query_log" in payload["sql"]
+    assert "query_duration_ms" in payload["sql"]
+    assert "read_rows" in payload["sql"]
+    assert "result_rows" in payload["sql"]
     assert "rows" in payload
+    if payload.get("ok") and payload["rows"]:
+        row = payload["rows"][0]
+        assert "event_time" in row
+        assert "user" in row
+        assert "query" in row
