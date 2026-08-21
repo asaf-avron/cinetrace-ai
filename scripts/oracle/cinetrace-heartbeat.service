@@ -1,0 +1,9 @@
+[Unit]
+Description=CIN Paperclip heartbeats (CEO then CTO), twice daily
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/opt/cinetrace-ai/scripts/oracle/cinetrace-heartbeat.sh
+Nice=10

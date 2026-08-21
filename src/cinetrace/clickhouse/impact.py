@@ -227,6 +227,12 @@ def summarize_impact(
         "job_count": len(priced),
         "waste_job_count": len(waste_jobs),
         "proposed_job_count": sum(1 for r in waste_jobs if r["has_proposal"]),
+        "open_usd": after,
+        "recovery_state": (
+            "none"
+            if recovered_total <= 0
+            else ("full" if after <= 0 else "partial")
+        ),
         "baseline": {
             "cpu_per_frame": round(baseline["cpu_per_frame"], 6),
             "gpu_per_frame": round(baseline["gpu_per_frame"], 6),

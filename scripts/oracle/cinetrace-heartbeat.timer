@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CIN CEO/CTO heartbeats at 08:00 and 20:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 20:00:00
+Persistent=false
+Unit=cinetrace-heartbeat.service
+
+[Install]
+WantedBy=timers.target

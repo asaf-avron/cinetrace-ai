@@ -9,10 +9,17 @@ const impactAfter = document.getElementById("impact-after");
 const impactMeta = document.getElementById("impact-meta");
 const impactCats = document.getElementById("impact-cats");
 const impactNote = document.getElementById("impact-note");
+const impactRecovery = document.getElementById("impact-recovery");
 const wasteSummary = document.getElementById("waste-summary");
 const wasteQueries = document.getElementById("waste-queries");
 const wasteNote = document.getElementById("waste-note");
 const rollupBody = document.getElementById("rollup");
+const farmSpark = document.getElementById("farm-spark");
+const mcpCallsEl = document.getElementById("mcp-calls");
+const mcpNote = document.getElementById("mcp-note");
+const queryLogBody = document.getElementById("query-log");
+const queryLogNote = document.getElementById("query-log-note");
+const queryLogBadge = document.getElementById("query-log-badge");
 
 let runPublic = false;
 let highlightedJobs = new Set();
@@ -79,7 +86,20 @@ function renderImpact(impact) {
   const cpu = Number(impact.waste_cpu_hours || 0).toFixed(1);
   impactMeta.textContent =
     `${gpu} GPU-h + ${cpu} CPU-h waste · ${impact.waste_job_count} of ${impact.job_count} jobs · ` +
-    `${money(impact.recovered_usd)} recovered by proposals`;
+    `${money(impact.recovered_usd)} recovered by recorded dry-runs`;
+  if (impactRecovery) {
+    const state = impact.recovery_state || "none";
+    if (state === "full") {
+      impactRecovery.textContent =
+        "All waste jobs already have dry-run proposals, so “after” is $0. That is recovered waste, not a healthy farm. Reset with: python -m cinetrace.clickhouse.reset_proposals";
+    } else if (state === "partial") {
+      impactRecovery.textContent =
+        `${money(impact.open_usd ?? impact.after_usd)} still open. Remaining jobs have no remediation_proposals row yet.`;
+    } else {
+      impactRecovery.textContent =
+        "No dry-run proposals on waste jobs yet. Click Run supervisor to record remediations.";
+    }
+  }
   impactCats.replaceChildren();
   for (const cat of impact.categories || []) {
     const li = document.createElement("li");
@@ -156,6 +176,7 @@ function renderRollup(rollup) {
   if (!rollupBody) return;
   rollupBody.replaceChildren();
   const days = (rollup && rollup.days) || [];
+  if (farmSpark) renderSpark(days);
   if (!days.length) {
     const tr = document.createElement("tr");
     const td = cell("No farm hours yet");
@@ -173,6 +194,81 @@ function renderRollup(rollup) {
       cell(row.gpu_hours),
     );
     rollupBody.append(tr);
+  }
+}
+
+function renderSpark(days) {
+  if (!farmSpark) return;
+  farmSpark.replaceChildren();
+  if (!days.length) return;
+  const w = 640;
+  const h = 72;
+  const pad = 4;
+  const maxH = Math.max(...days.map((d) => Number(d.cpu_hours) + Number(d.gpu_hours)), 1);
+  const barW = Math.max(8, (w - pad * 2) / days.length - 4);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("class", "spark-svg");
+  days.forEach((day, i) => {
+    const total = Number(day.cpu_hours) + Number(day.gpu_hours);
+    const bh = ((h - pad * 2) * total) / maxH;
+    const rect = document.createElementNS(ns, "rect");
+    rect.setAttribute("x", String(pad + i * ((w - pad * 2) / days.length)));
+    rect.setAttribute("y", String(h - pad - bh));
+    rect.setAttribute("width", String(barW));
+    rect.setAttribute("height", String(Math.max(1, bh)));
+    rect.setAttribute("class", "spark-bar");
+    rect.appendChild(document.createElementNS(ns, "title")).textContent =
+      `${day.day}: ${total.toFixed(1)} CPU+GPU h`;
+    svg.append(rect);
+  });
+  farmSpark.append(svg);
+}
+
+function renderMcp(calls, server) {
+  if (!mcpCallsEl) return;
+  mcpCallsEl.replaceChildren();
+  const rows = calls || [];
+  if (mcpNote) {
+    mcpNote.textContent = rows.length
+      ? `${rows.length} ${server || "mcp-clickhouse"} tool call${rows.length === 1 ? "" : "s"} from this ADK run.`
+      : "Click Run to capture Sentinel run_query calls from the ADK loop.";
+  }
+  if (!rows.length) return;
+  for (const call of rows) {
+    const li = document.createElement("li");
+    const head = document.createElement("p");
+    head.className = "mcp-head";
+    head.textContent = `${call.label || call.author} · ${call.tool || "run_query"} · ${call.mcp_server || "mcp-clickhouse"}`;
+    const pre = document.createElement("pre");
+    pre.className = "mcp-sql";
+    pre.textContent = call.query || "(no query text on this tool call)";
+    li.append(head, pre);
+    mcpCallsEl.append(li);
+  }
+}
+
+function renderQueryLog(log) {
+  if (!queryLogBody) return;
+  queryLogBody.replaceChildren();
+  if (queryLogNote && log && log.note) queryLogNote.textContent = log.note;
+  if (queryLogBadge) {
+    queryLogBadge.textContent = log && log.ok ? `${(log.rows || []).length} rows · system.query_log` : "query_log unavailable";
+  }
+  const rows = (log && log.rows) || [];
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = cell(log && log.ok === false ? "No query_log access on this service" : "No recent render_jobs queries");
+    td.colSpan = 3;
+    tr.append(td);
+    queryLogBody.append(tr);
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.append(cell(row.event_time), cell(row.user), cell(row.query));
+    queryLogBody.append(tr);
   }
 }
 
@@ -210,21 +306,24 @@ function applyRunResult(data) {
     (data.highlighted_job_ids || []).map((id) => String(id).toLowerCase()),
   );
   renderTimeline(data.timeline);
+  renderMcp(data.mcp_calls, data.mcp_server);
   renderJobs(data.jobs);
   renderProposals(data.proposals);
   renderImpact(data.impact);
   renderWaste(data.waste);
   if (data.rollup) renderRollup(data.rollup);
+  if (data.query_log) renderQueryLog(data.query_log);
 }
 
 async function refresh() {
-  const [healthRes, jobsRes, propRes, impactRes, wasteRes, rollupRes] = await Promise.all([
+  const [healthRes, jobsRes, propRes, impactRes, wasteRes, rollupRes, logRes] = await Promise.all([
     fetch("/api/health"),
     fetch("/api/jobs"),
     fetch("/api/proposals"),
     fetch("/api/impact"),
     fetch("/api/waste"),
     fetch("/api/rollup"),
+    fetch("/api/query-log"),
   ]);
   if (healthRes.ok) {
     const health = await healthRes.json();
@@ -247,6 +346,7 @@ async function refresh() {
   renderImpact(impact);
   renderWaste(waste);
   renderRollup(rollup);
+  if (logRes.ok) renderQueryLog(await logRes.json());
 }
 
 runBtn.addEventListener("click", async () => {

@@ -18,11 +18,12 @@ def test_sentinel_instruction_includes_waste_sql() -> None:
 
 
 def test_farm_rollup_sql() -> None:
-    from cinetrace.clickhouse.queries import FARM_ROLLUP
+    from cinetrace.clickhouse.queries import FARM_ROLLUP, QUERY_LOG
 
     assert "toDate" in FARM_ROLLUP
     assert "cpu_hours" in FARM_ROLLUP
     assert "gpu_hours" in FARM_ROLLUP
+    assert "system.query_log" in QUERY_LOG
 
 
 def test_impact_sql_matches_sentinel_predicates() -> None:

@@ -18,11 +18,13 @@ def test_index_page(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Run supervisor" in response.text
     assert "Estimated waste" in response.text
-    assert "If proposals applied" in response.text
+    assert "After recorded dry-runs" in response.text
     assert "Waste by category" in response.text
     assert "Sentinel queries" in response.text
     assert "The three agents" in response.text
     assert "kill render-farm waste" in response.text
+    assert "mcp-clickhouse" in response.text
+    assert "farm-spark" in response.text
 
 
 def test_health(client: TestClient) -> None:
@@ -124,3 +126,16 @@ def test_api_rollup(client: TestClient) -> None:
     assert "toDate" in payload["sql"]
     assert payload["days"]
     assert {"day", "jobs", "cpu_hours", "gpu_hours"} <= set(payload["days"][0])
+
+
+@pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
+def test_api_query_log(client: TestClient) -> None:
+    response = client.get("/api/query-log")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "system.query_log"
+    assert "query_log" in payload["sql"]
+    assert "rows" in payload

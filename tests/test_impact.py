@@ -122,6 +122,8 @@ def test_seed_waste_dollars() -> None:
     assert impact["before_usd"] == 625.12
     assert impact["after_usd"] == 625.12
     assert impact["recovered_usd"] == 0
+    assert impact["recovery_state"] == "none"
+    assert impact["open_usd"] == 625.12
     assert impact["waste_gpu_hours"] == 166.536
     assert impact["assumptions"]["gpu_hour_usd"] == GPU_HOUR_USD
     assert impact["assumptions"]["cpu_hour_usd"] == CPU_HOUR_USD
@@ -142,6 +144,8 @@ def test_before_after_when_proposals_applied() -> None:
     assert impact["after_usd"] == 416.88
     assert impact["before_usd"] == 625.12
     assert impact["proposed_job_count"] == 3
+    assert impact["recovery_state"] == "partial"
+    assert impact["open_usd"] == 416.88
 
 
 def test_hours_to_usd_uses_documented_rates() -> None:

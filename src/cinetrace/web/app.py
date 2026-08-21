@@ -13,7 +13,11 @@ from pydantic import BaseModel, Field
 from cinetrace.clickhouse.client import credentials_ready
 from cinetrace.clickhouse.impact import fetch_impact
 from cinetrace.clickhouse.proposals import list_jobs, list_proposals
-from cinetrace.clickhouse.queries import fetch_farm_rollup, fetch_waste_showcase
+from cinetrace.clickhouse.queries import (
+    fetch_farm_rollup,
+    fetch_query_log,
+    fetch_waste_showcase,
+)
 from cinetrace.env import load_env
 from cinetrace.web.guard import (
     HourlyLimiter,
@@ -89,6 +93,13 @@ def api_rollup() -> dict:
     return _jsonable_value(fetch_farm_rollup())
 
 
+@app.get("/api/query-log")
+def api_query_log() -> dict:
+    if not credentials_ready():
+        raise HTTPException(503, "ClickHouse credentials are not set")
+    return _jsonable_value(fetch_query_log())
+
+
 @app.post("/api/run")
 async def api_run(
     body: RunRequest | None = None,
@@ -110,11 +121,14 @@ async def api_run(
         "recorded": result["recorded"],
         "timeline": result.get("timeline") or [],
         "highlighted_job_ids": result.get("highlighted_job_ids") or [],
+        "mcp_calls": result.get("mcp_calls") or [],
+        "mcp_server": result.get("mcp_server") or "mcp-clickhouse",
         "jobs": _jsonable(list_jobs()),
         "proposals": _jsonable(list_proposals()),
         "impact": _jsonable_value(fetch_impact()),
         "waste": _jsonable_value(fetch_waste_showcase()),
         "rollup": _jsonable_value(fetch_farm_rollup()),
+        "query_log": _jsonable_value(fetch_query_log()),
     }
 
 

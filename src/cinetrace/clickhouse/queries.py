@@ -126,6 +126,55 @@ def fetch_farm_rollup() -> dict:
         client.close()
 
 
+QUERY_LOG = """
+SELECT
+    event_time,
+    user,
+    substring(query, 1, 360) AS query
+FROM system.query_log
+WHERE type = 'QueryFinish'
+  AND positionCaseInsensitive(query, 'render_jobs') > 0
+ORDER BY event_time DESC
+LIMIT 12
+"""
+
+
+def fetch_query_log() -> dict:
+    """Recent ClickHouse query_log rows that touched render_jobs.
+
+    Best-effort proof the cluster ran the Sentinel SQL. Cloud permissions may
+    deny system.query_log; the UI then shows the HTTPS showcase only.
+    """
+    from cinetrace.clickhouse.client import get_client
+
+    client = None
+    try:
+        client = get_client()
+        result = client.query(QUERY_LOG.strip())
+        rows = [dict(zip(result.column_names, row)) for row in result.result_rows]
+        return {
+            "ok": True,
+            "source": "system.query_log",
+            "sql": QUERY_LOG.strip(),
+            "rows": rows,
+            "note": "Live query_log on this ClickHouse service (same cluster MCP uses).",
+        }
+    except Exception as exc:  # noqa: BLE001 — Cloud may deny system tables
+        return {
+            "ok": False,
+            "source": "system.query_log",
+            "sql": QUERY_LOG.strip(),
+            "rows": [],
+            "note": (
+                f"query_log unavailable ({type(exc).__name__}). "
+                "Sentinel SQL is still on this page via HTTPS."
+            ),
+        }
+    finally:
+        if client is not None:
+            client.close()
+
+
 def sentinel_instruction() -> str:
     blocks = "\n\n".join(
         f"{name}:\n{sql.strip()}" for name, sql in ALL_WASTE.items()

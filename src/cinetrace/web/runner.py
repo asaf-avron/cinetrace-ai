@@ -39,6 +39,7 @@ AGENT_STEPS = {
 }
 
 _JOB_ID = re.compile(r"\bjob-[a-z0-9-]+\b", re.IGNORECASE)
+_MCP_TOOLS = {"run_query", "list_tables", "list_databases"}
 
 
 def _step_for(author: str) -> dict | None:
@@ -53,6 +54,46 @@ def _job_ids_in(text: str) -> list[str]:
         if job_id not in seen:
             seen.append(job_id)
     return seen
+
+
+def _part_function_call(part) -> tuple[str, dict]:
+    fc = getattr(part, "function_call", None)
+    if not fc:
+        return "", {}
+    name = (getattr(fc, "name", None) or "").strip()
+    args = getattr(fc, "args", None) or {}
+    if not isinstance(args, dict):
+        args = dict(args) if args else {}
+    return name, args
+
+
+def _mcp_calls_from_event(event) -> list[dict]:
+    """Tool calls that went through mcp-clickhouse (select-only run_query)."""
+    content = getattr(event, "content", None)
+    parts = getattr(content, "parts", None) or []
+    author = event.author or ""
+    step = _step_for(author)
+    found: list[dict] = []
+    for part in parts:
+        name, args = _part_function_call(part)
+        short = name.rsplit(".", 1)[-1].lower() if name else ""
+        query = args.get("query") or args.get("sql") or ""
+        is_mcp = short in _MCP_TOOLS or "run_query" in name.lower()
+        if not is_mcp and not (isinstance(query, str) and query.strip()):
+            continue
+        if not is_mcp:
+            continue
+        found.append(
+            {
+                "agent": (step or {}).get("id") or "orchestrator",
+                "label": (step or {}).get("label") or author,
+                "author": author,
+                "tool": short or "run_query",
+                "mcp_server": "mcp-clickhouse",
+                "query": query.strip() if isinstance(query, str) else str(query),
+            }
+        )
+    return found
 
 
 async def run_supervisor(message: str | None = None) -> dict:
@@ -73,11 +114,13 @@ async def run_supervisor(message: str | None = None) -> dict:
     lines: list[str] = []
     timeline: list[dict] = []
     highlighted: list[str] = []
+    mcp_calls: list[dict] = []
     async for event in runner.run_async(
         user_id=session.user_id,
         session_id=session.id,
         new_message=content,
     ):
+        mcp_calls.extend(_mcp_calls_from_event(event))
         if not event.content or not event.content.parts:
             continue
         text = "".join(part.text or "" for part in event.content.parts).strip()
@@ -139,4 +182,6 @@ async def run_supervisor(message: str | None = None) -> dict:
         "recorded": recorded,
         "timeline": timeline,
         "highlighted_job_ids": highlighted,
+        "mcp_calls": mcp_calls,
+        "mcp_server": "mcp-clickhouse",
     }

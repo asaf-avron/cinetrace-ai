@@ -35,6 +35,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
                     }
                 ],
                 "highlighted_job_ids": ["job-fail-lic"],
+                "mcp_calls": [],
             }
         ),
     )
@@ -43,6 +44,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(webapp, "fetch_impact", lambda: {"before_usd": 1})
     monkeypatch.setattr(webapp, "fetch_waste_showcase", lambda: {"summary": {}})
     monkeypatch.setattr(webapp, "fetch_farm_rollup", lambda: {"days": []})
+    monkeypatch.setattr(webapp, "fetch_query_log", lambda: {"ok": False, "rows": []})
     monkeypatch.setattr(webapp, "credentials_ready", lambda: True)
     return TestClient(webapp.app)
 
@@ -68,6 +70,7 @@ def test_run_bearer_token_ok(client: TestClient) -> None:
     assert payload["summary"] == "ok"
     assert payload["timeline"][0]["agent"] == "sentinel"
     assert payload["highlighted_job_ids"] == ["job-fail-lic"]
+    assert payload["mcp_server"] == "mcp-clickhouse"
 
 
 def test_run_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,6 +117,7 @@ def test_run_public_skips_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(webapp, "fetch_impact", lambda: {})
     monkeypatch.setattr(webapp, "fetch_waste_showcase", lambda: {})
     monkeypatch.setattr(webapp, "fetch_farm_rollup", lambda: {"days": []})
+    monkeypatch.setattr(webapp, "fetch_query_log", lambda: {"ok": False, "rows": []})
     monkeypatch.setattr(webapp, "credentials_ready", lambda: True)
     client = TestClient(webapp.app)
     response = client.post("/api/run", json={})

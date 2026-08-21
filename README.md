@@ -76,7 +76,17 @@ Remote MCP `https://mcp.clickhouse.cloud/mcp` is enabled on the Cloud service fo
 
 The page and job/proposal tables are public. Click **Run supervisor** to walk detect → decide → dry-run. Hosted judging week sets `SUPERVISOR_RUN_PUBLIC=true` so the token is not required; runs stay limited to 5 per hour and always use the fixed supervisor prompt. Set `SUPERVISOR_RUN_ENABLED=false` overnight.
 
+After Run, the page lists **this-run** `mcp-clickhouse` tool calls from the ADK loop, plus a best-effort `system.query_log` panel on the same cluster.
+
+If **After recorded dry-runs** is `$0`, waste jobs already have `remediation_proposals` rows (recovered, not a healthy farm). For a first-run delta:
+
+```bash
+uv run python -m cinetrace.clickhouse.reset_proposals
+```
+
 ClickHouse and `SUPERVISOR_RUN_TOKEN` live in Secret Manager. Wake the ClickHouse Cloud service before a demo so the first query does not time out.
+
+**How to test (judges):** open the Cloud Run URL, confirm the Sentinel SQL panels and Impact card, click Run supervisor (no token this judging window, 5/hour), watch the three-agent timeline and MCP evidence. Video shot list: [docs/demo/shot-list.md](docs/demo/shot-list.md). Freeze calendar: [docs/judging-freeze.md](docs/judging-freeze.md).
 
 ## Impact model
 
@@ -91,7 +101,7 @@ The supervisor **Impact** card prices waste from live `render_jobs` rows (same s
 
 Each job gets one primary class (failed, zombie, idle queue, overrun) so the headline dollar total is not double-counted. Retry loops are tagged for the waste-summary counts and are not added again.
 
-On the live seed (`now()`-relative timestamps, 62 jobs), Impact is computed from ClickHouse. The six named waste jobs still drive the dollars; extra farm rows are healthy traffic. The unit-test fixture for those six jobs alone is **$625.12**. After the larger seed, expect about **$623** before proposals (overrun baseline shifts slightly). **If proposals applied** subtracts waste for any `job_id` that already has a `remediation_proposals` row. These rates are a judge narrative, not a vendor quote.
+On the live seed (`now()`-relative timestamps, 62 jobs), Impact is computed from ClickHouse. The six named waste jobs still drive the dollars; extra farm rows are healthy traffic. The unit-test fixture for those six jobs alone is **$625.12**. After the larger seed, expect about **$623** before proposals (overrun baseline shifts slightly). **After recorded dry-runs** subtracts waste for any `job_id` that already has a `remediation_proposals` row. These rates are a judge narrative, not a vendor quote.
 
 Set a [budget alert](https://console.cloud.google.com/billing) on the `cinetrace-ai` billing account (50% / 90% of the $100 credits). Do not raise Vertex quotas. The Agent Engine `:query` URL is IAM-only — do not grant `allUsers` and do not use it as the public demo.
 
@@ -135,6 +145,8 @@ Before submit:
 - [x] Add a complete open-source license (`LICENSE` is Apache-2.0; confirm it appears in GitHub About after the public flip)
 - [x] Prove Google Cloud and ClickHouse are used at runtime in code
 - [x] Hosted project URL
-- [ ] 3-minute **working demo** video (YouTube/Vimeo, English or English subtitles)
-- [ ] Complete the Devpost form and select the ClickHouse track
-- [ ] Paste `https://github.com/asaf-avron/cinetrace-ai` as the Devpost repository URL
+- [x] 3-minute **working demo** video (https://vimeo.com/1220287055 — recut against live UI before 3 Sep)
+- [x] Complete the Devpost form and select the ClickHouse track
+- [x] Paste `https://github.com/asaf-avron/cinetrace-ai` as the Devpost repository URL
+
+Devpost: https://devpost.com/software/cinetrace-ai

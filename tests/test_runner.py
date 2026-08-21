@@ -1,5 +1,5 @@
 from cinetrace.clickhouse.apply import _statements
-from cinetrace.web.runner import _job_ids_in, _step_for
+from cinetrace.web.runner import _job_ids_in, _mcp_calls_from_event, _step_for
 
 
 def test_job_ids_extracted_from_agent_text() -> None:
@@ -22,3 +22,26 @@ def test_apply_strips_sql_comments() -> None:
         "TRUNCATE TABLE IF EXISTS render_jobs",
         "INSERT INTO t VALUES (1)",
     ]
+
+
+def test_mcp_calls_from_run_query_part() -> None:
+    class FC:
+        name = "run_query"
+        args = {"query": "SELECT job_id FROM render_jobs WHERE status = 'failed'"}
+
+    class Part:
+        function_call = FC()
+        text = None
+
+    class Content:
+        parts = [Part()]
+
+    class Event:
+        author = "diagnostic_sentinel"
+        content = Content()
+
+    calls = _mcp_calls_from_event(Event())
+    assert calls[0]["tool"] == "run_query"
+    assert calls[0]["mcp_server"] == "mcp-clickhouse"
+    assert "status = 'failed'" in calls[0]["query"]
+    assert calls[0]["agent"] == "sentinel"

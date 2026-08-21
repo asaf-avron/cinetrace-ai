@@ -40,11 +40,12 @@
           <p class="impact-usd" id="impact-before">—</p>
         </div>
         <div>
-          <p class="impact-label">If proposals applied</p>
+          <p class="impact-label">After recorded dry-runs</p>
           <p class="impact-usd after" id="impact-after">—</p>
         </div>
       </div>
       <p class="impact-meta" id="impact-meta">Loading seed telemetry…</p>
+      <p class="impact-recovery" id="impact-recovery"></p>
       <ul class="impact-cats" id="impact-cats"></ul>
       <p class="impact-note" id="impact-note"></p>
     </article>
@@ -61,11 +62,17 @@
     <ol class="agent-timeline" id="timeline">
       <li class="timeline-empty">No supervisor run in this session.</li>
     </ol>
+    <div class="mcp-evidence" id="mcp-evidence">
+      <h3>This run · mcp-clickhouse</h3>
+      <p class="panel-lead" id="mcp-note">Click Run to capture Sentinel <code>run_query</code> calls from the ADK loop.</p>
+      <ul id="mcp-calls"></ul>
+    </div>
   </section>
 
   <section id="farm-hours">
     <h2>Farm hours</h2>
     <p class="panel-lead">CPU and GPU hours by day from live <code>render_jobs</code>.</p>
+    <div class="farm-spark" id="farm-spark" aria-hidden="true"></div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -85,6 +92,21 @@
       Results are live from the same ClickHouse service.
     </p>
     <div id="waste-queries"></div>
+    <article class="query-panel" id="query-log-panel">
+      <header>
+        <h3>ClickHouse query_log</h3>
+        <span class="query-count" id="query-log-badge">live cluster</span>
+      </header>
+      <p class="panel-lead" id="query-log-note">Recent queries that touched <code>render_jobs</code> on this service.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>when</th><th>user</th><th>query</th></tr>
+          </thead>
+          <tbody id="query-log"></tbody>
+        </table>
+      </div>
+    </article>
   </section>
 
   <section>
