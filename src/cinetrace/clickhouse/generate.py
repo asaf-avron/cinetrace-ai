@@ -289,6 +289,30 @@ SHOTS_PER_SHOW = 14
 SESSION_HOURS = {"NEBULA": 5, "AURORA": 9, "ORBIT": 6, "DRIFT": 12, "VESPER": 16, "HALCYON": 20}
 _SESSION_SQL = "[" + ", ".join(str(SESSION_HOURS[s]) for s in SHOWS) + "]"
 
+# How far out a given shot's review sits, derived from the show's published
+# session and a stable per-shot hash so a quarter of the board slips to the
+# following session. Hashed rather than row-numbered because the ticker and the
+# re-anchor both need the same answer for a shot they see in isolation.
+_DUE_HOURS_SQL = f"""
+    toUInt32(arrayElement({_SESSION_SQL}, indexOf({_SHOWS_SQL}, show))) AS session_hours,
+    if(cityHash64(show, shot, 205) % 4 = 0, session_hours + 14, session_hours) AS due_hours
+"""
+
+# How much of a shot is already delivered, at generation and on every roll.
+# This is the dial that decides whether the delivery board has a story on it.
+# Too high and every shot has a handful of frames left, the farm clears the
+# queue in minutes, and nothing can ever miss its review; too low and the whole
+# board is red, which is just as uninformative.
+#
+# At 0.72 the tail of NEBULA's five-hour session -- the show the stuck slots sit
+# on -- starts just past its deadline and comes back when those slots are freed.
+# The count climbs through a session rather than draining, because the deadline
+# closes faster than the farm clears the queue: measured 5 at risk at the top of
+# the session, 8 halfway, and it resets when the shots roll.
+PROGRESS_FLOOR = 0.72
+PROGRESS_SPREAD = 15
+_PROGRESS_SQL = f"{PROGRESS_FLOOR} + ({{h}} % {PROGRESS_SPREAD}) / 100.0"
+
 SHOTS_SQL = f"""
 INSERT INTO shots (show, shot, sequence, review_at, frames_required, frames_delivered, priority)
 WITH
@@ -296,9 +320,8 @@ WITH
     cityHash64(show, shot, 203) AS h_prog,
     cityHash64(show, shot, 204) AS h_pri,
     toUInt32(140 + h_req % 260) AS required,
-    toUInt32(arrayElement({_SESSION_SQL}, indexOf({_SHOWS_SQL}, show))) AS session_hours,
-    if(rn % 4 = 0, session_hours + 14, session_hours) AS due_hours,
-    0.72 + (h_prog % 15) / 100.0 AS progress
+    {_DUE_HOURS_SQL.strip()},
+    {_PROGRESS_SQL.format(h="h_prog")} AS progress
 SELECT
     show,
     shot,
@@ -381,8 +404,10 @@ FROM render_jobs
 WHERE status = 'running'
 """
 
-# Delivery moves too. Shots whose review has passed roll to tomorrow's dailies
-# with fresh progress, so there is always a next deadline to protect.
+# Delivery moves too. Shots whose review has passed roll to their show's next
+# session with fresh progress, so there is always a next deadline to protect.
+# The new deadline is measured from now(), not from the deadline it replaces:
+# adding to the old value ratchets the whole board into the future.
 # Delivery has to advance at roughly the rate the farm could actually render,
 # or the board drains and "dailies at risk" is permanently zero. About 224 slots
 # at ~0.46 hours per frame is ~480 frames an hour across all shows, so at a 30s
@@ -399,16 +424,18 @@ WHERE status = 'running'
 # The derived columns live in a subquery rather than a WITH clause so that
 # `review_at` on the way out does not shadow the `review_at` that `rolled`
 # is computed from.
-TICK_SHOTS_SQL = """
+TICK_SHOTS_SQL = f"""
 INSERT INTO shots (show, shot, sequence, review_at, frames_required, frames_delivered, priority)
 SELECT
     show,
     shot,
     sequence,
-    if(rolled, review_at + INTERVAL 24 HOUR, review_at) AS next_review_at,
+    if(rolled,
+       toDateTime(now('UTC') + toIntervalHour(due_hours), 'UTC'),
+       review_at) AS next_review_at,
     if(rolled, toUInt32(140 + h % 260), frames_required) AS next_required,
     if(rolled,
-       toUInt32(round((140 + h % 260) * (0.72 + (h % 15) / 100.0))),
+       toUInt32(round((140 + h % 260) * ({_PROGRESS_SQL.format(h="h")}))),
        least(frames_delivered + if(h % 21 = 0, 1, 0), frames_required)) AS next_delivered,
     priority
 FROM
@@ -416,9 +443,41 @@ FROM
     SELECT
         show, shot, sequence, review_at, frames_required, frames_delivered, priority,
         cityHash64(show, shot, toUnixTimestamp(now('UTC'))) AS h,
+        {_DUE_HOURS_SQL.strip()},
         (review_at <= now('UTC')) OR (frames_delivered >= frames_required) AS rolled
     FROM shots FINAL
 )
+"""
+
+
+# The ticker alone cannot repair a board that has already drifted, and drift is
+# the default over a judging window: a shot that rolls early gets a new deadline,
+# and if that deadline is measured from the old one rather than from now() the
+# whole schedule ratchets forward. Three days of 30-second ticks moved the
+# earliest session from 5 hours out to 42, at which point nothing on the board
+# can ever be late and the headline reads zero.
+#
+# So the invariant is stated here and re-asserted on every refresh: a shot's
+# review sits within its show's published session window, never beyond it.
+REANCHOR_SHOTS_SQL = f"""
+INSERT INTO shots (show, shot, sequence, review_at, frames_required, frames_delivered, priority)
+SELECT
+    show,
+    shot,
+    sequence,
+    toDateTime(now('UTC') + toIntervalHour(due_hours), 'UTC') AS review_at,
+    frames_required,
+    frames_delivered,
+    priority
+FROM
+(
+    SELECT
+        show, shot, sequence, review_at AS current_review_at,
+        frames_required, frames_delivered, priority,
+        {_DUE_HOURS_SQL.strip()}
+    FROM shots FINAL
+)
+WHERE current_review_at > now('UTC') + toIntervalHour(due_hours)
 """
 
 
@@ -493,6 +552,7 @@ def refresh_live_cohort(client: Any, jobs_per_day: int = JOBS_PER_DAY) -> None:
     client.command(LIVE_SQL.format(days=DAYS, total=2 * jobs_per_day, offset=900_000))
     client.command(ARCHETYPES_SQL)
     client.command(LIVE_BACKFILL_SQL)
+    client.command(REANCHOR_SHOTS_SQL)
 
 
 def tick(client: Any) -> None:
