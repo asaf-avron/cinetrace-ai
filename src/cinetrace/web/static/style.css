@@ -85,8 +85,6 @@ a { color: var(--accent); }
   padding: 8px 12px; font-size: 12px; font-weight: 600;
 }
 .back-top:hover { border-color: var(--accent); }
-/* ?solo hides the nav, so sticky headers must drop back to the viewport top. */
-body:has(.page-nav[hidden]) { --nav-h: 0px; }
 
 /* ------------------------------------------------------------- masthead */
 
@@ -270,7 +268,7 @@ pre code { color: #cfe3f5; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); }
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.07em; background: var(--panel-2); position: sticky; top: var(--nav-h); }
+th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.07em; background: var(--panel-2); position: sticky; top: 0; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr.hit { background: rgba(212, 160, 23, 0.08); }
 /* Evidence is the only column that can wrap, so it is the one that yields when
