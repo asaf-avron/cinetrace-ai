@@ -11,7 +11,34 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="masthead">
+  <nav class="page-nav" id="page-nav" aria-label="Supervisor">
+    <a class="nav-brand" href="#top">CineTrace</a>
+    <ul class="nav-links">
+      <li><a href="#dailies">Dailies</a></li>
+      <li><a href="#impact-row">Impact</a></li>
+      <li><a href="#agents">Agents</a></li>
+      <li><a href="#root-cause">Root cause</a></li>
+      <li><a href="#recall">Recall</a></li>
+      <li><a href="#sentinel-queries">Detection</a></li>
+      <li><a href="#farm-hours">Farm</a></li>
+      <li><a href="#proposals-section">Proposals</a></li>
+    </ul>
+    <div class="nav-run" id="nav-run">
+      <ol class="run-stepper" id="run-stepper" hidden>
+        <li data-role="detect">Detect</li>
+        <li data-role="decide">Decide</li>
+        <li data-role="remediate">Dry-run</li>
+      </ol>
+      <span id="status">Idle. A run calls Gemini on Vertex and spends credits.</span>
+      <span class="run-elapsed" id="run-elapsed" hidden></span>
+    </div>
+    <div class="live-pill" id="live-pill" data-state="idle">
+      <span class="live-dot"></span>
+      <span id="live-label">connecting to farm</span>
+    </div>
+  </nav>
+
+  <header class="masthead" id="top">
     <div class="masthead-copy">
       <p class="eyebrow">CineTrace AI</p>
       <h1>The studio supervisor that protects the dailies</h1>
@@ -21,13 +48,9 @@
         being burned, and propose the fix that saves the review.
       </p>
       <p class="meta">
-        Gemini &middot; Google Cloud ADK &middot; Vertex Agent Engine &middot;
+        Gemini &middot; Google Cloud ADK &middot;
         ClickHouse via <code>mcp-clickhouse</code>
       </p>
-    </div>
-    <div class="live-pill" id="live-pill" data-state="idle">
-      <span class="live-dot"></span>
-      <span id="live-label">connecting to farm</span>
     </div>
   </header>
 
@@ -68,9 +91,8 @@
     </details>
   </section>
 
-  <section class="toolbar">
+  <section class="toolbar" id="run-toolbar">
     <button id="run" type="button">Run supervisor</button>
-    <span id="status">Idle. A run calls Gemini on Vertex and spends credits.</span>
     <label class="token" id="token-row" hidden>
       Demo token
       <input id="token" type="password" autocomplete="off" />
@@ -219,7 +241,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="live-jobs">
     <h2>Live farm</h2>
     <p class="panel-lead">Open waste first, then the freshest activity. 198k jobs in the table; these are the ones that matter.</p>
     <div class="table-wrap">
@@ -254,9 +276,11 @@
     </div>
   </section>
 
+  <button type="button" class="back-top" id="back-top" hidden>Back to top</button>
+
   <footer class="page-footer">
     <p>
-      CineTrace AI &middot; Gemini on Vertex AI Agent Engine &middot; ClickHouse Cloud via
+      CineTrace AI &middot; Gemini on Google Cloud ADK &middot; ClickHouse Cloud via
       the official <code>mcp-clickhouse</code> server &middot;
       <a href="https://github.com/asaf-avron/cinetrace-ai">source</a>
     </p>

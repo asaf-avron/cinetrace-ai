@@ -73,6 +73,26 @@ def test_run_bearer_token_ok(client: TestClient) -> None:
     assert payload["timeline"][0]["agent"] == "sentinel"
     assert payload["highlighted_job_ids"] == ["job-fail-lic"]
     assert payload["mcp_server"] == "mcp-clickhouse"
+    assert {
+        "run_id",
+        "engine",
+        "engine_fallback_reason",
+        "summary",
+        "timeline",
+        "highlighted_job_ids",
+        "mcp_calls",
+        "mcp_server",
+        "sentinel_passes",
+        "cost",
+        "jobs",
+        "proposals",
+        "impact",
+        "waste",
+        "shots",
+        "root_cause",
+        "rollup",
+        "query_log",
+    } <= set(payload)
 
 
 def test_run_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

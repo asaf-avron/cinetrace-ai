@@ -102,6 +102,23 @@ def test_timeline_numbers_the_sentinel_passes() -> None:
     assert collector.highlighted == ["job-zombie"]
 
 
+def test_collector_returns_query_stage_and_step_frames() -> None:
+    collector = RunCollector()
+    query_frames = collector.add(
+        _FakeEvent("diagnostic_sentinel", tool="run_query", query="SELECT 1")
+    )
+    assert [f["type"] for f in query_frames] == ["query", "cost"]
+    assert query_frames[0]["query"] == "SELECT 1"
+
+    step_frames = collector.add(
+        _FakeEvent("diagnostic_sentinel", text="looking at job-zombie")
+    )
+    assert [f["type"] for f in step_frames] == ["stage", "step", "cost"]
+    assert step_frames[0]["agent"] == "sentinel"
+    assert step_frames[0]["pass"] == 1
+    assert step_frames[1]["job_ids"] == ["job-zombie"]
+
+
 def test_cost_uses_flash_list_pricing() -> None:
     assert cost_usd(1_000_000, 0) == 0.30
     assert cost_usd(0, 1_000_000) == 2.50

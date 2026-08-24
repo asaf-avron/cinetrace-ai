@@ -12,9 +12,10 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
    `live.ticks` increasing.
 2. `uv run python -m cinetrace.clickhouse.reset_proposals` so the Impact card
    starts unrecovered and the Approve beat has somewhere to go.
-3. Load the page once and click **Run supervisor**, then reload. The timeline
-   replays from `/api/last-run`, so the agent evidence is on screen from the
-   first frame and you are not filming a 90-second wait.
+3. Load the page and click **Run supervisor**. The run now streams: the
+   Detect → Decide → Dry-run stepper lights up and each SQL statement appears
+   as the Sentinel writes it. Hold on that. After it finishes, reload once so
+   `/api/last-run` keeps the evidence on screen for the rest of the cut.
 4. Browser at 1600px wide, dark OS theme, no bookmarks bar, no extensions.
 5. Check "Dailies at risk" shows a handful, not zero and not forty.
 
@@ -37,14 +38,15 @@ Pan across the scale strip. Point at the live pill counting up.
 > "This is 235 million rows of frame-level telemetry in ClickHouse. 198,000 jobs
 > over 90 days, and it's still being written to while we watch."
 
-**0:35–1:05 — The agents, and the SQL they wrote**
+**0:35–1:05 — The agents, and the SQL they write live**
 
-Scroll to the three-agent timeline. Expand the first two MCP evidence entries.
+Stay on the three-agent panel while the run is in flight. The stepper and the
+SQL list are the shot — do not cut away to a spinner.
 
 > "Three Gemini agents on Google Cloud ADK. The Sentinel isn't given queries —
 > it's given the schema and a goal, and it writes its own SQL through the
-> official ClickHouse MCP server. That's fourteen queries it composed this run.
-> None of them are in our repo."
+> official ClickHouse MCP server. You're watching it compose those against
+> 235 million rows, live. None of them are in our repo."
 
 **1:05–1:30 — Root cause. The best thirty seconds.**
 
@@ -84,9 +86,9 @@ Click **Approve** on a proposal. Cut to the Impact card moving.
 
 Back to the top. Cost meter visible.
 
-> "Gemini, Google Cloud ADK and Agent Engine, ClickHouse through MCP. This run
-> cost about seven cents and found six thousand dollars of capacity that's
-> burning right now — and the reviews it was about to cost."
+> "Gemini, Google Cloud ADK, ClickHouse through MCP. This run cost about seven
+> cents and found six thousand dollars of capacity that's burning right now —
+> and the reviews it was about to cost."
 
 ## Do not film
 
