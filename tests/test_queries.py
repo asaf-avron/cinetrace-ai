@@ -106,3 +106,35 @@ def test_farm_is_at_studio_scale() -> None:
     assert scale["samples"] > 100_000_000, "ClickHouse should be doing real work"
     assert scale["jobs"] > 100_000
     assert scale["rollup_rows"] > 0, "the materialized view should be populated"
+
+
+@needs_clickhouse
+def test_review_deadlines_stay_inside_their_published_session() -> None:
+    """The board must not ratchet into the future.
+
+    A rolled shot gets its next deadline measured from now(); measuring it from
+    the deadline it replaced pushes the whole schedule forward a day at a time,
+    and after a few days of ticking nothing on the board can ever be late.
+    """
+    from cinetrace.clickhouse.generate import SESSION_HOURS
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    rows = fetch_shots_at_risk()["rows"]
+    assert rows, "the delivery board should be populated"
+    for row in rows:
+        # +14h is the quarter of the board that slips to the following session.
+        limit = SESSION_HOURS[row["show"]] + 14
+        assert row["hours_to_review"] <= limit + 1, (
+            f"{row['show']} {row['shot']} sits {row['hours_to_review']}h out, "
+            f"past its {limit}h session -- the deadlines have drifted"
+        )
+
+
+@needs_clickhouse
+def test_delivery_board_has_something_at_stake() -> None:
+    """Zero shots at risk makes the product's headline read zero."""
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    shots = fetch_shots_at_risk()
+    assert shots["tracked_count"] > 0
+    assert shots["slots_stuck"] > 0, "zombie and idle-queue jobs should hold slots"
