@@ -14,6 +14,7 @@ const state = {
   tick: null,
   mcpCalls: [],
   sentinelPasses: 0,
+  engine: null,
 };
 
 // ---------------------------------------------------------------- formatting
@@ -426,10 +427,11 @@ function appendMcp(call) {
 function renderCost(cost, engine, fallback) {
   const el = $("cost-meter");
   if (!cost || !cost.model_calls) { el.hidden = true; return; }
-  const where = engine === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
+  const which = engine || state.engine;
+  const where = which === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
   el.hidden = false;
   el.innerHTML =
-    `This run: <strong>$${cost.usd.toFixed(4)}</strong> of ${esc(cost.model)} ` +
+    `This run: <strong>$${cost.usd.toFixed(4)}</strong> of ${esc(cost.model || "gemini-2.5-flash")} ` +
     `(${compact(cost.input_tokens)} in / ${compact(cost.output_tokens)} out, ` +
     `${cost.model_calls} calls, ${cost.elapsed_s}s) on ${where}.` +
     (fallback ? ` <span class="dim">${esc(fallback)}</span>` : "");
@@ -506,7 +508,7 @@ async function decide(button) {
 
 function setStepper(role, pass) {
   const stepper = $("run-stepper");
-  stepper.hidden = false;
+  $("nav-run").hidden = false;
   const order = ["detect", "decide", "remediate"];
   const idx = order.indexOf(role);
   stepper.querySelectorAll("li").forEach((li) => {
@@ -525,7 +527,6 @@ function startElapsed() {
   stopElapsed();
   state.runStarted = Date.now();
   const el = $("run-elapsed");
-  el.hidden = false;
   el.textContent = "0s";
   state.tick = setInterval(() => {
     el.textContent = `${Math.round((Date.now() - state.runStarted) / 1000)}s`;
@@ -564,6 +565,7 @@ function applyComplete(data) {
 function applyFrame(frame) {
   switch (frame.type) {
     case "engine": {
+      state.engine = frame.engine;
       const where = frame.engine === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
       $("status").textContent = `Running on ${where}…`;
       break;
@@ -587,8 +589,7 @@ function applyFrame(frame) {
       $("status").textContent = `${frame.label} reported.`;
       break;
     case "cost":
-      renderCost(frame, null, "");
-      if (frame.elapsed_s) $("run-elapsed").textContent = `${Math.round(frame.elapsed_s)}s`;
+      renderCost(frame, state.engine, "");
       break;
     case "complete":
       applyComplete(frame);
@@ -629,6 +630,7 @@ async function runSupervisor() {
   button.disabled = true;
   state.mcpCalls = [];
   state.sentinelPasses = 0;
+  state.engine = null;
   $("timeline").innerHTML = "";
   $("mcp-calls").innerHTML = "";
   $("mcp-note").textContent = "The Sentinel is composing SQL now.";

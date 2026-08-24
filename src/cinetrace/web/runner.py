@@ -61,6 +61,7 @@ AGENT_STEPS = {
 # waste should be able to say what it spends.
 INPUT_USD_PER_MTOK = 0.30
 OUTPUT_USD_PER_MTOK = 2.50
+MODEL_NAME = "gemini-2.5-flash"
 
 _JOB_ID = re.compile(r"\bjob-[a-z0-9-]+\b", re.IGNORECASE)
 _MCP_TOOLS = {"run_query", "list_tables", "list_databases"}
@@ -171,6 +172,7 @@ class RunCollector:
             "model_calls": self.model_calls,
             "usd": cost_usd(self.input_tokens, self.output_tokens),
             "elapsed_s": round(time.time() - self._started, 1),
+            "model": MODEL_NAME,
         }
 
     def add(self, event: Any) -> list[dict]:
@@ -258,7 +260,7 @@ class RunCollector:
                 "model_calls": self.model_calls,
                 "usd": cost_usd(self.input_tokens, self.output_tokens),
                 "elapsed_s": round(elapsed_s, 1),
-                "model": "gemini-2.5-flash",
+                "model": MODEL_NAME,
                 "note": "Gemini 2.5 Flash list pricing applied to this run's tokens.",
             },
         }

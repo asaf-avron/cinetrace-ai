@@ -34,45 +34,50 @@ a { color: var(--accent); }
 
 .page-nav {
   position: sticky; top: 0; z-index: 40;
-  display: flex; align-items: center; gap: 16px;
-  min-height: var(--nav-h); padding: 0 24px;
   background: rgba(11, 13, 16, 0.94);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(10px);
 }
+/* Inner container on the same 1280px grid as the page, so the brand lines up
+   with the section headings instead of floating out at the window edge. */
+.nav-inner {
+  max-width: 1280px; margin: 0 auto; padding: 0 24px;
+  min-height: var(--nav-h);
+  display: flex; align-items: center; gap: 20px; flex-wrap: nowrap;
+}
 .nav-brand {
   color: var(--accent); text-decoration: none; font-weight: 600;
-  letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px;
+  letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px;
   flex: none;
 }
+/* Grows to absorb the free space, which keeps the run chips and the live pill
+   pinned right without either needing an auto margin that would fight. */
 .nav-links {
   list-style: none; margin: 0; padding: 0;
-  display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto;
+  display: flex; gap: 2px; flex: 1 1 auto; flex-wrap: nowrap; min-width: 0;
 }
 .nav-links a {
-  color: var(--muted); text-decoration: none; font-size: 12.5px;
-  padding: 6px 8px; border-radius: 4px;
+  display: block; color: var(--muted); text-decoration: none; font-size: 12.5px;
+  padding: 7px 9px; white-space: nowrap;
+  border-bottom: 2px solid transparent;
 }
 .nav-links a:hover { color: var(--text); }
-.nav-links a.active { color: var(--text); background: var(--panel); }
-.nav-run {
-  display: flex; align-items: center; gap: 10px; min-width: 0;
-  font-size: 12.5px; color: var(--muted); flex: 1 1 280px;
-}
-.nav-run #status {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-}
-.run-elapsed { font-family: "IBM Plex Mono", monospace; color: var(--accent); flex: none; }
+.nav-links a.active { color: var(--text); border-bottom-color: var(--accent); }
+.nav-run { display: flex; align-items: center; gap: 8px; flex: none; }
+.run-elapsed { font-family: "IBM Plex Mono", monospace; color: var(--accent); font-size: 12px; }
 .run-stepper {
-  list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex: none;
+  list-style: none; margin: 0; padding: 0; display: flex; gap: 5px; flex: none;
 }
 .run-stepper li {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em;
   border: 1px solid var(--line); padding: 3px 7px; color: var(--muted);
+  white-space: nowrap;
 }
 .run-stepper li.active { color: var(--text); border-color: var(--run); }
 .run-stepper li.done { color: var(--rec); border-color: #1f4a35; }
-.page-nav .live-pill { margin-left: auto; padding: 6px 12px; font-size: 12px; }
+/* The pill is the one thing allowed to truncate; the nav links never wrap. */
+.page-nav .live-pill { padding: 6px 12px; font-size: 12px; min-width: 0; overflow: hidden; }
+.page-nav #live-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .back-top {
   position: fixed; right: 22px; bottom: 22px; z-index: 30;
@@ -296,10 +301,9 @@ button.reject { background: transparent; color: var(--muted); border: 1px solid 
 
 .page-footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; margin-top: 20px; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1150px) {
   .nav-links { display: none; }
-  .page-nav { flex-wrap: wrap; min-height: unset; padding: 8px 16px; }
-  .nav-run { flex: 1 1 100%; order: 3; }
+  .nav-brand { margin-right: auto; }
 }
 @media (max-width: 1000px) {
   .dashboard, .impact-hero { grid-template-columns: 1fr; }

@@ -209,7 +209,8 @@ below; the thumbnail should be the first one.
 | `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. 2.2M rows in 114ms. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |
 | `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. Thresholds are per-cohort tDigest fences, not constants. |
-| `08-full-page.png` | The whole supervisor. |
+| `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. |
+| `09-full-page.png` | The whole supervisor. |
 
 ## Built With
 
