@@ -27,9 +27,10 @@ says which shots it is about to cost you.
 CineTrace AI watches a render farm's telemetry in ClickHouse and turns wasted
 compute into a delivery forecast.
 
-The headline is not dollars, it is **"4 shots will miss review, 3 are
-recoverable"**. Underneath it, three Gemini agents on Google Cloud ADK run a
-fixed detect → decide → act pipeline:
+The headline is not dollars, it is **"3 shots will miss review, 3 are
+recoverable"** — a count that moves with the farm, climbing as a review
+approaches and resetting when the session rolls. Underneath it, three Gemini
+agents on Google Cloud ADK run a fixed detect → decide → act pipeline:
 
 - The **Diagnostic Sentinel** is given the schema and a goal, not a list of
   queries. It composes its own SQL through the official `mcp-clickhouse` server
@@ -202,7 +203,7 @@ below; the thumbnail should be the first one.
 
 | File | Caption |
 | --- | --- |
-| `01-dailies-at-risk.png` | The headline is delivery, not cost: 4 shots will miss review, 3 come back if the 42 stuck GPU slots are released. 235M telemetry rows behind it. |
+| `01-dailies-at-risk.png` | The headline is delivery, not cost: 3 shots will miss review, and all 3 come back if the 42 GPU slots held by zombie and idle-queue jobs are released. 238M telemetry rows behind it. |
 | `02-impact-and-waste.png` | Open waste is what an agent can still change. The 90-day figure sizes the problem. Approval, not detection, moves the number. |
 | `03-three-agents.png` | Detect → decide → act as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator ties each job to the review it protects. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |

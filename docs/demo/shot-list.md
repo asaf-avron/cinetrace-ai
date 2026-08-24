@@ -23,9 +23,10 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
 
 **0:00–0:20 — The problem, stated as delivery**
 
-Open on the hero. Read the headline off the screen: four shots will miss their
-review, three are recoverable, forty-two GPU slots are held by zombie and
-idle-queue jobs.
+Open on the hero. Read the headline off the screen — the count climbs as a
+review approaches, so use whatever is live at record time. At time of writing:
+three shots will miss their review, all three recoverable, forty-two GPU slots
+held by zombie and idle-queue jobs.
 
 > "A render farm is the most expensive machine in a studio, and nobody watches
 > it in real time. When a job hangs overnight on eight GPUs, the cost isn't the
