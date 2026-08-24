@@ -12,29 +12,30 @@
 </head>
 <body>
   <nav class="page-nav" id="page-nav" aria-label="Supervisor">
-    <a class="nav-brand" href="#top">CineTrace</a>
-    <ul class="nav-links">
-      <li><a href="#dailies">Dailies</a></li>
-      <li><a href="#impact-row">Impact</a></li>
-      <li><a href="#agents">Agents</a></li>
-      <li><a href="#root-cause">Root cause</a></li>
-      <li><a href="#recall">Recall</a></li>
-      <li><a href="#sentinel-queries">Detection</a></li>
-      <li><a href="#farm-hours">Farm</a></li>
-      <li><a href="#proposals-section">Proposals</a></li>
-    </ul>
-    <div class="nav-run" id="nav-run">
-      <ol class="run-stepper" id="run-stepper" hidden>
-        <li data-role="detect">Detect</li>
-        <li data-role="decide">Decide</li>
-        <li data-role="remediate">Dry-run</li>
-      </ol>
-      <span id="status">Idle. A run calls Gemini on Vertex and spends credits.</span>
-      <span class="run-elapsed" id="run-elapsed" hidden></span>
-    </div>
-    <div class="live-pill" id="live-pill" data-state="idle">
-      <span class="live-dot"></span>
-      <span id="live-label">connecting to farm</span>
+    <div class="nav-inner">
+      <a class="nav-brand" href="#top">CineTrace</a>
+      <ul class="nav-links">
+        <li><a href="#dailies">Dailies</a></li>
+        <li><a href="#impact-row">Impact</a></li>
+        <li><a href="#agents">Agents</a></li>
+        <li><a href="#root-cause">Root cause</a></li>
+        <li><a href="#recall">Recall</a></li>
+        <li><a href="#sentinel-queries">Detection</a></li>
+        <li><a href="#farm-hours">Farm</a></li>
+        <li><a href="#proposals-section">Proposals</a></li>
+      </ul>
+      <div class="nav-run" id="nav-run" hidden>
+        <ol class="run-stepper" id="run-stepper">
+          <li data-role="detect">Detect</li>
+          <li data-role="decide">Decide</li>
+          <li data-role="remediate">Dry-run</li>
+        </ol>
+        <span class="run-elapsed" id="run-elapsed"></span>
+      </div>
+      <div class="live-pill" id="live-pill" data-state="idle">
+        <span class="live-dot"></span>
+        <span id="live-label">connecting to farm</span>
+      </div>
     </div>
   </nav>
 
@@ -93,6 +94,7 @@
 
   <section class="toolbar" id="run-toolbar">
     <button id="run" type="button">Run supervisor</button>
+    <span id="status">Idle. A run calls Gemini on Vertex and spends credits.</span>
     <label class="token" id="token-row" hidden>
       Demo token
       <input id="token" type="password" autocomplete="off" />
