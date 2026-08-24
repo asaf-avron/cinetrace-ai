@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -49,7 +49,7 @@ from cinetrace.web.guard import (
     token_ok,
 )
 from cinetrace.web.live import live_farm
-from cinetrace.web.runner import DEFAULT_PROMPT, run_supervisor
+from cinetrace.web.runner import DEFAULT_PROMPT, run_supervisor, stream_supervisor
 
 load_env()
 
@@ -237,22 +237,8 @@ def api_decide(body: DecisionRequest) -> dict:
     }
 
 
-@app.post("/api/run")
-async def api_run(
-    body: RunRequest | None = None,
-    authorization: Annotated[str | None, Header()] = None,
-    x_run_token: Annotated[str | None, Header()] = None,
-) -> dict:
-    if not run_enabled():
-        raise HTTPException(403, "Supervisor run is disabled")
-    if not token_ok(extract_token(authorization, x_run_token)):
-        raise HTTPException(401, "Demo token required")
-    if not app.state.limiter.allow():
-        raise HTTPException(429, "Run limit reached (5 per hour)")
-    _require_clickhouse()
-    _ = body  # The public run always uses the fixed prompt.
-    result = await run_supervisor(DEFAULT_PROMPT)
-    app.state.last_run = {
+def _last_run_from(result: dict) -> dict:
+    return {
         "run_id": result.get("run_id"),
         "engine": result.get("engine"),
         "engine_fallback_reason": result.get("engine_fallback_reason", ""),
@@ -262,6 +248,10 @@ async def api_run(
         "sentinel_passes": result.get("sentinel_passes", 0),
         "cost": result.get("cost") or {},
     }
+
+
+def _complete_from(result: dict) -> dict:
+    """The 18-key payload the page already knows how to render."""
     return {
         "run_id": result.get("run_id"),
         "engine": result.get("engine"),
@@ -282,6 +272,64 @@ async def api_run(
         "rollup": _jsonable_value(fetch_farm_rollup()),
         "query_log": _jsonable_value(fetch_query_log()),
     }
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, default=str)}\n\n"
+
+
+@app.post("/api/run")
+async def api_run(
+    request: Request,
+    body: RunRequest | None = None,
+    authorization: Annotated[str | None, Header()] = None,
+    x_run_token: Annotated[str | None, Header()] = None,
+):
+    if not run_enabled():
+        raise HTTPException(403, "Supervisor run is disabled")
+    if not token_ok(extract_token(authorization, x_run_token)):
+        raise HTTPException(401, "Demo token required")
+    if not app.state.limiter.allow():
+        raise HTTPException(429, "Run limit reached (5 per hour)")
+    _require_clickhouse()
+    _ = body  # The public run always uses the fixed prompt.
+
+    # Gates run first. A 401/403/429/503 must stay a real status code, not a
+    # 200 with the error buried in an SSE frame.
+    wants_stream = "text/event-stream" in (request.headers.get("accept") or "")
+    if wants_stream:
+
+        async def events():
+            result = None
+            try:
+                async for frame in stream_supervisor(DEFAULT_PROMPT):
+                    if frame.get("type") == "result":
+                        result = {
+                            key: value
+                            for key, value in frame.items()
+                            if key != "type"
+                        }
+                        continue
+                    yield _sse(frame)
+                if result is None:
+                    yield _sse({"type": "error", "message": "supervisor produced no result"})
+                    return
+                complete = _complete_from(result)
+                app.state.last_run = _last_run_from(complete)
+                yield _sse({"type": "complete", **complete})
+            except Exception as exc:  # noqa: BLE001 - surface to the live UI
+                yield _sse({"type": "error", "message": str(exc) or type(exc).__name__})
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    result = await run_supervisor(DEFAULT_PROMPT)
+    complete = _complete_from(result)
+    app.state.last_run = _last_run_from(complete)
+    return complete
 
 
 def _jsonable_value(value):

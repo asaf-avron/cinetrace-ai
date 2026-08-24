@@ -59,9 +59,9 @@ every 30 seconds and the page streams updates over SSE.
 **Google Cloud.** Gemini 2.5 Flash through the Agent Development Kit. The
 pipeline is an ADK `SequentialAgent` wrapping the three agents, with the Sentinel
 itself a `LoopAgent` so it can react to what it found rather than answering in
-one shot. Stages hand off through session state. The agents are deployed to
-Vertex AI Agent Engine and the Cloud Run app calls that managed runtime, falling
-back to an in-process ADK runner if the remote call is unavailable. Error text is
+one shot. Stages hand off through session state. The pipeline runs in-process on
+Cloud Run; the same `root_agent` can be pointed at Vertex AI Agent Engine by
+setting `AGENT_ENGINE_ID`. Error text is
 embedded with Vertex AI `text-embedding-005`. The supervisor UI is FastAPI on
 Cloud Run; secrets are in Secret Manager; deploys run through GitHub Actions with
 Workload Identity Federation so no GCP credentials exist outside Google.
@@ -214,7 +214,7 @@ below; the thumbnail should be the first one.
 ## Built With
 
 `adk` · `clickhouse` · `cloud-run` · `fastapi` · `gemini` · `google-cloud`
-`mcp-clickhouse` · `vertex-ai` · `agent-engine` · `materialized-views`
+`mcp-clickhouse` · `vertex-ai` · `materialized-views`
 `vector-search` · `python`
 
 ## Try it out

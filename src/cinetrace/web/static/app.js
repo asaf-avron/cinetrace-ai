@@ -10,6 +10,10 @@ const $ = (id) => document.getElementById(id);
 const state = {
   highlighted: new Set(),
   running: false,
+  runStarted: 0,
+  tick: null,
+  mcpCalls: [],
+  sentinelPasses: 0,
 };
 
 // ---------------------------------------------------------------- formatting
@@ -351,9 +355,8 @@ const ROLE_COPY = {
   remediate: "Dry-run",
 };
 
-function renderTimeline(steps, passes) {
-  if (!steps || !steps.length) return;
-  $("timeline").innerHTML = steps.map((s) => `
+function timelineItem(s, passes) {
+  return `
     <li class="timeline-step ${esc(s.agent)}">
       <div class="step-head">
         <span class="step-role">${esc(ROLE_COPY[s.role] || s.role)}</span>
@@ -364,11 +367,38 @@ function renderTimeline(steps, passes) {
       ${s.job_ids && s.job_ids.length
         ? `<p class="step-jobs">${s.job_ids.map((j) => `<code>${esc(j)}</code>`).join(" ")}</p>`
         : ""}
-    </li>`).join("");
+    </li>`;
+}
+
+function renderTimeline(steps, passes) {
+  if (!steps || !steps.length) return;
+  $("timeline").innerHTML = steps.map((s) => timelineItem(s, passes)).join("");
+}
+
+function appendTimelineStep(s, passes) {
+  const list = $("timeline");
+  if (list.querySelector(".timeline-empty")) list.innerHTML = "";
+  list.insertAdjacentHTML("beforeend", timelineItem(s, passes));
+}
+
+function mcpItem(c, open) {
+  const preview = (c.query || "").replace(/\s+/g, " ").trim();
+  return `
+    <li>
+      <details ${open ? "open" : ""}>
+        <summary>
+          <span class="mcp-agent">${esc(c.label)}</span>
+          <span class="mcp-preview">${esc(preview.slice(0, 110))}${preview.length > 110 ? "…" : ""}</span>
+          <span class="mcp-tool">${esc(c.mcp_server)} · ${esc(c.tool)}</span>
+        </summary>
+        <pre><code>${esc(c.query)}</code></pre>
+      </details>
+    </li>`;
 }
 
 function renderMcp(calls) {
   const list = $("mcp-calls");
+  state.mcpCalls = calls || [];
   if (!calls || !calls.length) {
     $("mcp-note").textContent =
       "This run made no MCP calls. That happens when the farm is clean and the Sentinel exits on its first pass.";
@@ -381,20 +411,16 @@ function renderMcp(calls) {
   // Fourteen full SQL blocks is three thousand pixels of page. Collapse them:
   // the one-line preview is enough to see the agent is composing real queries,
   // and anyone who wants the whole statement is one click away.
-  list.innerHTML = calls.map((c, i) => {
-    const preview = c.query.replace(/\s+/g, " ").trim();
-    return `
-    <li>
-      <details ${i < 2 ? "open" : ""}>
-        <summary>
-          <span class="mcp-agent">${esc(c.label)}</span>
-          <span class="mcp-preview">${esc(preview.slice(0, 110))}${preview.length > 110 ? "…" : ""}</span>
-          <span class="mcp-tool">${esc(c.mcp_server)} · ${esc(c.tool)}</span>
-        </summary>
-        <pre><code>${esc(c.query)}</code></pre>
-      </details>
-    </li>`;
-  }).join("");
+  list.innerHTML = calls.map((c, i) => mcpItem(c, i < 2)).join("");
+}
+
+function appendMcp(call) {
+  state.mcpCalls.push(call);
+  const n = state.mcpCalls.length;
+  $("mcp-note").innerHTML =
+    `${n} <code>run_query</code> call${n === 1 ? "" : "s"} through the official ` +
+    `<code>mcp-clickhouse</code> server. The Sentinel composed this SQL from the schema; none of it is hardcoded in the repo.`;
+  $("mcp-calls").insertAdjacentHTML("beforeend", mcpItem(call, n <= 2));
 }
 
 function renderCost(cost, engine, fallback) {
@@ -478,15 +504,144 @@ async function decide(button) {
   }
 }
 
+function setStepper(role, pass) {
+  const stepper = $("run-stepper");
+  stepper.hidden = false;
+  const order = ["detect", "decide", "remediate"];
+  const idx = order.indexOf(role);
+  stepper.querySelectorAll("li").forEach((li) => {
+    const r = li.dataset.role;
+    li.classList.toggle("active", r === role);
+    li.classList.toggle("done", idx >= 0 && order.indexOf(r) < idx);
+    if (r === "detect" && pass) {
+      li.textContent = `Detect · pass ${pass}`;
+    } else if (r === "detect") {
+      li.textContent = "Detect";
+    }
+  });
+}
+
+function startElapsed() {
+  stopElapsed();
+  state.runStarted = Date.now();
+  const el = $("run-elapsed");
+  el.hidden = false;
+  el.textContent = "0s";
+  state.tick = setInterval(() => {
+    el.textContent = `${Math.round((Date.now() - state.runStarted) / 1000)}s`;
+  }, 250);
+}
+
+function stopElapsed() {
+  if (state.tick) {
+    clearInterval(state.tick);
+    state.tick = null;
+  }
+}
+
+function applyComplete(data) {
+  state.highlighted = new Set((data.highlighted_job_ids || []).map((j) => j.toLowerCase()));
+  state.sentinelPasses = data.sentinel_passes || 0;
+  renderTimeline(data.timeline, data.sentinel_passes);
+  renderMcp(data.mcp_calls);
+  renderCost(data.cost, data.engine, data.engine_fallback_reason);
+  renderImpact(data.impact);
+  renderWaste(data.waste);
+  renderShots(data.shots);
+  renderRootCause(data.root_cause);
+  renderRollup(data.rollup);
+  renderJobs(data.jobs);
+  renderProposals(data.proposals);
+  renderQueryLog(data.query_log);
+  const pending = (data.proposals || []).filter((p) => p.decision === "pending").length;
+  $("status").textContent =
+    `Run ${data.run_id} complete. ${(data.mcp_calls || []).length} MCP queries, ` +
+    `${pending} proposals awaiting approval.`;
+  setStepper("remediate");
+  $("proposals-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function applyFrame(frame) {
+  switch (frame.type) {
+    case "engine": {
+      const where = frame.engine === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
+      $("status").textContent = `Running on ${where}…`;
+      break;
+    }
+    case "stage": {
+      if (frame.pass) state.sentinelPasses = Math.max(state.sentinelPasses, frame.pass);
+      setStepper(frame.role, frame.pass);
+      const pass = frame.pass ? ` · pass ${frame.pass}` : "";
+      $("status").textContent = `${frame.label}${pass} is working…`;
+      break;
+    }
+    case "query":
+      appendMcp(frame);
+      $("status").textContent = `${frame.label} wrote a query (${state.mcpCalls.length} so far)`;
+      break;
+    case "step":
+      if (frame.job_ids) {
+        for (const job of frame.job_ids) state.highlighted.add(String(job).toLowerCase());
+      }
+      appendTimelineStep(frame, state.sentinelPasses || frame.pass);
+      $("status").textContent = `${frame.label} reported.`;
+      break;
+    case "cost":
+      renderCost(frame, null, "");
+      if (frame.elapsed_s) $("run-elapsed").textContent = `${Math.round(frame.elapsed_s)}s`;
+      break;
+    case "complete":
+      applyComplete(frame);
+      break;
+    case "error":
+      throw new Error(frame.message || "Supervisor run failed");
+    default:
+      break;
+  }
+}
+
+async function consumeRunStream(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop();
+    for (const part of parts) {
+      const line = part.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      applyFrame(JSON.parse(line.slice(6)));
+    }
+  }
+  if (buffer.trim()) {
+    const line = buffer.split("\n").find((l) => l.startsWith("data: "));
+    if (line) applyFrame(JSON.parse(line.slice(6)));
+  }
+}
+
 async function runSupervisor() {
   if (state.running) return;
   state.running = true;
   const button = $("run");
   button.disabled = true;
+  state.mcpCalls = [];
+  state.sentinelPasses = 0;
+  $("timeline").innerHTML = "";
+  $("mcp-calls").innerHTML = "";
+  $("mcp-note").textContent = "The Sentinel is composing SQL now.";
+  setStepper("detect");
   $("status").textContent =
     "Detecting… the Sentinel is writing its own SQL against 235M telemetry rows.";
+  startElapsed();
+  $("agents").scrollIntoView({ behavior: "smooth", block: "start" });
 
-  const headers = { "Content-Type": "application/json" };
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
   const token = $("token").value.trim();
   if (token) headers["X-Run-Token"] = token;
 
@@ -499,26 +654,16 @@ async function runSupervisor() {
     if (response.status === 429) throw new Error("Run limit reached. Try again within the hour.");
     if (!response.ok) throw new Error(await response.text());
 
-    const data = await response.json();
-    state.highlighted = new Set((data.highlighted_job_ids || []).map((j) => j.toLowerCase()));
-    renderTimeline(data.timeline, data.sentinel_passes);
-    renderMcp(data.mcp_calls);
-    renderCost(data.cost, data.engine, data.engine_fallback_reason);
-    renderImpact(data.impact);
-    renderWaste(data.waste);
-    renderShots(data.shots);
-    renderRootCause(data.root_cause);
-    renderRollup(data.rollup);
-    renderJobs(data.jobs);
-    renderProposals(data.proposals);
-    renderQueryLog(data.query_log);
-    $("status").textContent =
-      `Run ${data.run_id} complete. ${data.mcp_calls.length} MCP queries, ` +
-      `${(data.proposals || []).filter((p) => p.decision === "pending").length} proposals awaiting approval.`;
-    $("proposals-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const ctype = response.headers.get("content-type") || "";
+    if (ctype.includes("text/event-stream") && response.body) {
+      await consumeRunStream(response);
+    } else {
+      applyComplete(await response.json());
+    }
   } catch (err) {
     $("status").textContent = err.message;
   } finally {
+    stopElapsed();
     state.running = false;
     button.disabled = false;
   }
@@ -582,8 +727,35 @@ async function load() {
 function applySolo() {
   const solo = new URLSearchParams(location.search).get("solo");
   if (!solo || !$(solo)) return;
-  document.querySelectorAll("body > section, body > header, body > footer")
+  document.querySelectorAll("body > section, body > header, body > footer, body > nav, body > .back-top")
     .forEach((el) => { if (el !== $(solo)) el.hidden = true; });
+}
+
+function initNav() {
+  const links = [...document.querySelectorAll(".nav-links a")];
+  if (!links.length) return;
+  const sections = links
+    .map((a) => $(a.getAttribute("href").slice(1)))
+    .filter(Boolean);
+  const observer = new IntersectionObserver((entries) => {
+    const visible = entries
+      .filter((e) => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    links.forEach((l) => {
+      l.classList.toggle("active", l.getAttribute("href") === `#${visible.target.id}`);
+    });
+  }, { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.2, 0.5, 1] });
+  sections.forEach((s) => observer.observe(s));
+}
+
+function initBackTop() {
+  const btn = $("back-top");
+  if (!btn) return;
+  const onScroll = () => { btn.hidden = window.scrollY < 400; };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  onScroll();
 }
 
 document.addEventListener("click", (event) => {
@@ -595,6 +767,8 @@ $("run").addEventListener("click", runSupervisor);
 $("recall-form").addEventListener("submit", runRecall);
 
 applySolo();
+initNav();
+initBackTop();
 load();
 connectLive();
 runRecall();

@@ -160,8 +160,22 @@ class RunCollector:
         self.output_tokens = 0
         self.model_calls = 0
         self.sentinel_passes = 0
+        self._started = time.time()
+        self._last_stage: tuple[str, int | None] | None = None
 
-    def add(self, event: Any) -> None:
+    def _cost_frame(self) -> dict:
+        return {
+            "type": "cost",
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "model_calls": self.model_calls,
+            "usd": cost_usd(self.input_tokens, self.output_tokens),
+            "elapsed_s": round(time.time() - self._started, 1),
+        }
+
+    def add(self, event: Any) -> list[dict]:
+        """Fold one event and return the frames it produced for the live UI."""
+        frames: list[dict] = []
         normalized = normalize_event(event)
         for call in _mcp_calls(normalized):
             # Models like to end SQL with a semicolon; mcp-clickhouse rejects
@@ -174,6 +188,7 @@ class RunCollector:
             ):
                 continue
             self.mcp_calls.append(call)
+            frames.append({"type": "query", **call})
         self.input_tokens += normalized["input_tokens"]
         self.output_tokens += normalized["output_tokens"]
         if normalized["has_usage"]:
@@ -181,13 +196,17 @@ class RunCollector:
 
         text = normalized["text"]
         if not text:
-            return
+            if frames:
+                frames.append(self._cost_frame())
+            return frames
         author = normalized["author"]
         self.lines.append(f"[{author}]: {text}")
 
         step = _step_for(author)
         if not step:
-            return
+            if frames:
+                frames.append(self._cost_frame())
+            return frames
         jobs = _job_ids_in(text)
         for job_id in jobs:
             if job_id not in self.highlighted:
@@ -201,10 +220,27 @@ class RunCollector:
             "text": text,
             "job_ids": jobs,
         }
+        pass_n: int | None = None
         if step["id"] == "sentinel":
             self.sentinel_passes += 1
-            entry["pass"] = self.sentinel_passes
+            pass_n = self.sentinel_passes
+            entry["pass"] = pass_n
+        stage_key = (step["id"], pass_n)
+        if stage_key != self._last_stage:
+            self._last_stage = stage_key
+            stage = {
+                "type": "stage",
+                "agent": step["id"],
+                "label": step["label"],
+                "role": step["role"],
+            }
+            if pass_n is not None:
+                stage["pass"] = pass_n
+            frames.append(stage)
         self.timeline.append(entry)
+        frames.append({"type": "step", **entry})
+        frames.append(self._cost_frame())
+        return frames
 
     def payload(self, run_id: str, elapsed_s: float, engine: str) -> dict:
         return {
@@ -228,7 +264,7 @@ class RunCollector:
         }
 
 
-async def _run_in_process(collector: RunCollector, prompt: str) -> None:
+async def _iter_in_process(prompt: str):
     app = App(name="cinetrace", root_agent=root_agent)
     session_service = InMemorySessionService()
     runner = Runner(
@@ -245,30 +281,53 @@ async def _run_in_process(collector: RunCollector, prompt: str) -> None:
         session_id=session.id,
         new_message=content,
     ):
-        collector.add(event)
+        yield event
 
 
-async def run_supervisor(message: str | None = None) -> dict:
-    """Run detect -> decide -> dry-run and return everything the page needs."""
+async def stream_supervisor(message: str | None = None):
+    """Yield engine/stage/query/step/cost frames, then a result payload.
+
+    The public run always uses the fixed prompt. `message` is accepted so the
+    endpoint signature stays the same and is ignored on purpose.
+    """
     load_env()
-    _ = message  # The public run always uses the fixed prompt.
+    _ = message
     run_id = uuid.uuid4().hex[:12]
     started = time.time()
 
     from cinetrace.web.agent_engine import stream_agent_engine
 
     collector = RunCollector()
-    engine = "agent_engine"
     events, error = await stream_agent_engine(DEFAULT_PROMPT)
     if events:
+        engine = "agent_engine"
+        yield {"type": "engine", "engine": engine, "reason": ""}
         for event in events:
-            collector.add(event)
+            for frame in collector.add(event):
+                yield frame
     else:
         engine = "in_process_adk"
-        collector = RunCollector()
-        await _run_in_process(collector, DEFAULT_PROMPT)
+        yield {
+            "type": "engine",
+            "engine": engine,
+            "reason": error or "",
+        }
+        async for event in _iter_in_process(DEFAULT_PROMPT):
+            for frame in collector.add(event):
+                yield frame
 
     payload = collector.payload(run_id, time.time() - started, engine)
     payload["engine_fallback_reason"] = error or ""
     payload["proposals"] = list_proposals()
-    return payload
+    yield {"type": "result", **payload}
+
+
+async def run_supervisor(message: str | None = None) -> dict:
+    """Buffer the streamed run into the payload the JSON endpoint already returns."""
+    result: dict | None = None
+    async for frame in stream_supervisor(message):
+        if frame.get("type") == "result":
+            result = {key: value for key, value in frame.items() if key != "type"}
+    if result is None:
+        raise RuntimeError("supervisor produced no result")
+    return result

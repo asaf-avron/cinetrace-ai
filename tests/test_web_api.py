@@ -33,6 +33,10 @@ def test_index_page(client: TestClient) -> None:
         "mcp-clickhouse",
         "farm-spark",
         "shot-cards",
+        "page-nav",
+        "Back to top",
+        "run-toolbar",
+        "live-jobs",
     ):
         assert marker in page, f"missing {marker!r}"
 

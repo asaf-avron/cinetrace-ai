@@ -50,7 +50,7 @@ flowchart TB
         FS --> MV
         RJ --> CB
     end
-    subgraph adk [Vertex AI Agent Engine · ADK]
+    subgraph adk [Google Cloud ADK on Cloud Run]
         SEQ["cinetrace_supervisor<br/>SequentialAgent"]
         SEN["Diagnostic Sentinel<br/>LoopAgent, writes its own SQL"]
         DEC["Studio Orchestrator<br/>weighs delivery risk"]

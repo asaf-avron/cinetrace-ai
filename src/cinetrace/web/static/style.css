@@ -11,6 +11,7 @@
   --queue: #c9a227;
   --ok: #3cb371;
   --rec: #7dd3a8;
+  --nav-h: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -27,6 +28,60 @@ code, pre, table, .token input, .mono { font-family: "IBM Plex Mono", ui-monospa
 a { color: var(--accent); }
 
 .masthead, section, .toolbar, .page-footer { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
+.masthead, section, .toolbar, .page-footer, .query-panel { scroll-margin-top: calc(var(--nav-h) + 10px); }
+
+/* ------------------------------------------------------------- page nav */
+
+.page-nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 16px;
+  min-height: var(--nav-h); padding: 0 24px;
+  background: rgba(11, 13, 16, 0.94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+.nav-brand {
+  color: var(--accent); text-decoration: none; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px;
+  flex: none;
+}
+.nav-links {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto;
+}
+.nav-links a {
+  color: var(--muted); text-decoration: none; font-size: 12.5px;
+  padding: 6px 8px; border-radius: 4px;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-links a.active { color: var(--text); background: var(--panel); }
+.nav-run {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  font-size: 12.5px; color: var(--muted); flex: 1 1 280px;
+}
+.nav-run #status {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.run-elapsed { font-family: "IBM Plex Mono", monospace; color: var(--accent); flex: none; }
+.run-stepper {
+  list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex: none;
+}
+.run-stepper li {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  border: 1px solid var(--line); padding: 3px 7px; color: var(--muted);
+}
+.run-stepper li.active { color: var(--text); border-color: var(--run); }
+.run-stepper li.done { color: var(--rec); border-color: #1f4a35; }
+.page-nav .live-pill { margin-left: auto; padding: 6px 12px; font-size: 12px; }
+
+.back-top {
+  position: fixed; right: 22px; bottom: 22px; z-index: 30;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  padding: 8px 12px; font-size: 12px; font-weight: 600;
+}
+.back-top:hover { border-color: var(--accent); }
+/* ?solo hides the nav, so sticky headers must drop back to the viewport top. */
+body:has(.page-nav[hidden]) { --nav-h: 0px; }
 
 /* ------------------------------------------------------------- masthead */
 
@@ -100,12 +155,12 @@ h3 { margin: 22px 0 8px; font-size: 12px; color: var(--muted); text-transform: u
 /* ------------------------------------------------------------- toolbar */
 
 .toolbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+#status { color: var(--muted); }
 button {
   background: var(--accent); color: #111; border: 0; padding: 10px 18px;
   font: inherit; font-weight: 600; cursor: pointer;
 }
 button:disabled { opacity: 0.5; cursor: wait; }
-#status { color: var(--muted); }
 .token { color: var(--muted); display: flex; gap: 8px; align-items: center; font-size: 13px; }
 .token input { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 8px 10px; width: 16rem; font-size: 13px; }
 .cost-meter {
@@ -210,7 +265,7 @@ pre code { color: #cfe3f5; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); }
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.07em; background: var(--panel-2); position: sticky; top: 0; }
+th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.07em; background: var(--panel-2); position: sticky; top: var(--nav-h); }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr.hit { background: rgba(212, 160, 23, 0.08); }
 /* Evidence is the only column that can wrap, so it is the one that yields when
@@ -241,6 +296,11 @@ button.reject { background: transparent; color: var(--muted); border: 1px solid 
 
 .page-footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; margin-top: 20px; }
 
+@media (max-width: 1100px) {
+  .nav-links { display: none; }
+  .page-nav { flex-wrap: wrap; min-height: unset; padding: 8px 16px; }
+  .nav-run { flex: 1 1 100%; order: 3; }
+}
 @media (max-width: 1000px) {
   .dashboard, .impact-hero { grid-template-columns: 1fr; }
   .scale-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
