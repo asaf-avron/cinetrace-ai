@@ -36,8 +36,8 @@ held by zombie and idle-queue jobs.
 
 Pan across the scale strip. Point at the live pill counting up.
 
-> "This is 235 million rows of frame-level telemetry in ClickHouse. 198,000 jobs
-> over 90 days, and it's still being written to while we watch."
+> "This is a quarter of a billion rows of frame-level telemetry in ClickHouse.
+> 198,000 jobs, 240 hosts, and it's still being written to while we watch."
 
 **0:35–1:05 — The agents, and the SQL they write live**
 
@@ -46,8 +46,8 @@ SQL list are the shot — do not cut away to a spinner.
 
 > "Three Gemini agents on Google Cloud ADK. The Sentinel isn't given queries —
 > it's given the schema and a goal, and it writes its own SQL through the
-> official ClickHouse MCP server. You're watching it compose those against
-> 235 million rows, live. None of them are in our repo."
+> official ClickHouse MCP server. You're watching it compose those against a
+> quarter of a billion rows, live. None of them are in our repo."
 
 **1:05–1:30 — Root cause. The best thirty seconds.**
 
@@ -55,8 +55,9 @@ Scroll to Root cause. Land on the 97% VRAM row. Open the SQL drawer.
 
 > "When it finds an out-of-memory failure it runs an ASOF join — the last
 > telemetry sample before the job died. This one died twenty seconds after the
-> host hit 97% VRAM. That's 2.2 million rows in 114 milliseconds. You cannot ask
-> a database 'the row just before this moment' in one join anywhere else."
+> host hit 97% VRAM. Two point two million rows touched out of a quarter of a
+> billion, and the panel tells you exactly what it cost. You cannot ask a
+> database 'the row just before this moment' in one join anywhere else."
 
 **1:30–1:50 — Institutional memory**
 

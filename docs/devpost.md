@@ -36,9 +36,9 @@ agents on Google Cloud ADK run a fixed detect → decide → act pipeline:
   queries. It composes its own SQL through the official `mcp-clickhouse` server
   — typically 14 to 16 `run_query` calls per run — starting broad and drilling
   into whatever looks worst. When it finds an OOM failure it runs an
-  `ASOF LEFT JOIN` against 235 million telemetry samples to find the last
-  reading before the job died, and reports things like *"job-live-90003 died 20
-  seconds after host rnd-f16 hit 97% VRAM."*
+  `ASOF LEFT JOIN` against a quarter-billion telemetry samples to find the
+  last reading before the job died, and reports things like *"job-live-90003
+  died 20 seconds after host rnd-f16 hit 97% VRAM."*
 - The **Studio Orchestrator** weighs those findings against the dailies
   schedule. Waste that threatens a client review outranks waste that only costs
   money, so a zombie on a show with a review in five hours beats a bigger
@@ -53,7 +53,9 @@ waste does not reduce your bill, a supervisor approving the fix does.
 The farm is live while you watch it: a background ticker writes fresh telemetry
 every 30 seconds and the page streams updates over SSE.
 
-**Scale:** 235M frame samples, 198k render jobs, 240 hosts, 90 days, 3.6 GB.
+**Scale:** 240M frame samples, 198k render jobs, 240 hosts, 94 days, 3.7 GB.
+The ticker keeps writing, so the live page reads higher every day until the
+100-day TTL parks it around a quarter of a billion rows.
 
 ## How we built it
 
@@ -79,7 +81,8 @@ The schema leans on things that are ClickHouse-specific rather than incidental:
   with a **projection** on `(host, ts)` so the ASOF root-cause join can seek by
   host, plus `set` and `minmax` skip indexes and a 100-day TTL.
 - A **materialized view** aggregates into an `AggregatingMergeTree` on insert,
-  so the dashboard reads 802k pre-computed rows instead of 235M raw ones.
+  so the dashboard reads about 850k pre-computed rows instead of a
+  quarter-billion raw ones.
 - **`quantileTDigest`** builds per-(show, renderer) baselines. The old rule was
   `cpu_hours >= 100`, which is meaningless across renderers whose costs differ
   by 10x; now a job is an overrun when it crosses a robust upper fence,
@@ -100,15 +103,16 @@ rebuilds identically and the numbers in the video match the numbers in the repo.
 **The first version did not need ClickHouse.** It ran on 62 rows. Every query
 would have produced identical output on SQLite, which is a strange thing to
 submit to a ClickHouse track. Fixing that meant rebuilding the data model around
-a frame-level fact table instead of a job-level one — 235M rows instead of 62 —
-and rewriting the impact calculation, which had been summing in a Python loop
-over every job. That does not survive 198k rows.
+a frame-level fact table instead of a job-level one — hundreds of millions of
+rows instead of 62 — and rewriting the impact calculation, which had been
+summing in a Python loop over every job. That does not survive 198k rows.
 
 **Scale exposes lazy SQL immediately.** The first ASOF join had no bound on its
-right side, so ClickHouse tried to materialise all 235M samples and hit the 7.2
-GiB memory ceiling. Bounding both sides — the failure window and the handful of
-hosts actually involved — took it to 2.2M rows in 114ms. Similar story with
-alias shadowing: `sum(waste_cpu_hours) AS waste_cpu_hours` is fine alone but
+right side, so ClickHouse tried to materialise the whole fact table and hit the
+7.2 GiB memory ceiling. Bounding both sides — the failure window and the handful
+of hosts actually involved — takes it to 2.2M rows, and the page prints that
+count on every load so you can check us. Similar story with alias shadowing:
+`sum(waste_cpu_hours) AS waste_cpu_hours` is fine alone but
 makes any other aggregate reading that column fail with "aggregate function
 inside another aggregate function".
 
@@ -141,8 +145,9 @@ joins it chose to use, and none of it is hardcoded in the repo. That is the
 difference between an agent and a prompt with queries pasted in.
 
 The root-cause line. *"This job died 20 seconds after the host hit 97% VRAM"* is
-a sentence a render wrangler would write, produced by a single join over 235
-million rows in 114 milliseconds.
+a sentence a render wrangler would write, produced by a single ASOF join that
+reads 2.2M rows out of a quarter-billion — the bounds and the `(host, ts)`
+projection do that work, not a bigger cluster.
 
 The honesty of the numbers. The page distinguishes waste you can still act on
 from waste that already happened, refuses to credit a saving until a human
@@ -173,10 +178,10 @@ right constant was.
 fixation with prompt wording first. It half-worked. Fixing the definition of
 "actionable" fixed it completely and permanently, for every future prompt.
 
-**Watch what the model does with a 235M-row table.** The Sentinel bounds its
-`frame_samples` queries by job id and time range because the schema brief tells
-it to, in the same paragraph that tells it how big the table is. Without that,
-an agent will happily write the query that takes the cluster down.
+**Watch what the model does with a quarter-billion-row table.** The Sentinel
+bounds its `frame_samples` queries by job id and time range because the schema
+brief tells it to, in the same paragraph that tells it how big the table is.
+Without that, an agent will happily write the query that takes the cluster down.
 
 ## What's next for CineTrace AI
 
@@ -203,11 +208,11 @@ below; the thumbnail should be the first one.
 
 | File | Caption |
 | --- | --- |
-| `01-dailies-at-risk.png` | The headline is delivery, not cost: 3 shots will miss review, and all 3 come back if the 42 GPU slots held by zombie and idle-queue jobs are released. 238M telemetry rows behind it. |
+| `01-dailies-at-risk.png` | The headline is delivery, not cost: 3 shots will miss review, and all 3 come back if the 42 GPU slots held by zombie and idle-queue jobs are released. 239.7M telemetry rows behind it. |
 | `02-impact-and-waste.png` | Open waste is what an agent can still change. The 90-day figure sizes the problem. Approval, not detection, moves the number. |
 | `03-three-agents.png` | Detect → decide → act as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator ties each job to the review it protects. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
-| `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. 2.2M rows in 114ms. VRAM at 97% is the smoking gun. |
+| `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. Bounds and a (host, ts) projection keep it to 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |
 | `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. Thresholds are per-cohort tDigest fences, not constants. |
 | `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. |
