@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CineTrace AI — protect the dailies</title>
-  <meta name="description" content="Autonomous VFX studio supervisor. Three Gemini agents on Google Cloud ADK read 235M rows of render-farm telemetry in ClickHouse to stop compute waste before it costs a review." />
+  <meta name="description" content="Autonomous VFX studio supervisor. Three Gemini agents on Google Cloud ADK read a quarter-billion rows of render-farm telemetry in ClickHouse to stop compute waste before it costs a review." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -157,8 +157,8 @@
     <p class="panel-lead">
       <code>ASOF LEFT JOIN</code> pairs every OOM failure with the nearest telemetry
       sample recorded before it died. No other engine expresses "the row just before
-      this moment" in one join, and pulling 235M samples into Python to find it is not
-      an option.
+      this moment" in one join, and pulling a quarter-billion samples into Python to
+      find it is not an option.
     </p>
     <div class="table-wrap">
       <table>
@@ -231,8 +231,8 @@
     <h2>Farm activity</h2>
     <p class="panel-lead">
       Served from <code>farm_minute</code>, an <code>AggregatingMergeTree</code> kept
-      current by a materialized view. The 235M-row fact table is never touched by this
-      chart. <span class="stat-badge" id="timeline-stats"></span>
+      current by a materialized view. The quarter-billion-row fact table is never
+      touched by this chart. <span class="stat-badge" id="timeline-stats"></span>
     </p>
     <div class="farm-spark" id="farm-spark" aria-hidden="true"></div>
     <div class="table-wrap">

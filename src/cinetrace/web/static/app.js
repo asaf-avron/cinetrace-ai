@@ -2,8 +2,8 @@
 
 // Supervisor page. Every panel renders straight from a ClickHouse query and
 // carries the cost of that query, because on this track the interesting claim
-// is not "we have a dashboard" but "this scanned 235M rows and came back in
-// under a second".
+// is not "we have a dashboard" but "this scanned a quarter-billion rows and came
+// back in under a second".
 
 const $ = (id) => document.getElementById(id);
 
@@ -636,7 +636,7 @@ async function runSupervisor() {
   $("mcp-note").textContent = "The Sentinel is composing SQL now.";
   setStepper("detect");
   $("status").textContent =
-    "Detecting… the Sentinel is writing its own SQL against 235M telemetry rows.";
+    "Detecting… the Sentinel is writing its own SQL against a quarter-billion telemetry rows.";
   startElapsed();
   $("agents").scrollIntoView({ behavior: "smooth", block: "start" });
 

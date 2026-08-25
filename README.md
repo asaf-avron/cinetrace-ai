@@ -6,10 +6,10 @@ Render-farm waste is usually sold as a billing problem. It isn't. When a zombie
 job pins eight GPUs overnight, the cost is not the $28 of compute — it is the
 three shots that miss the 9am client review and the overtime that follows.
 
-CineTrace AI watches 235 million rows of render-farm telemetry in ClickHouse,
-proves *why* capacity is being burned, and proposes the fix that saves the
-review. Three Gemini agents on Google Cloud ADK, querying ClickHouse through the
-official `mcp-clickhouse` server.
+CineTrace AI watches a quarter-billion rows of render-farm telemetry in
+ClickHouse, proves *why* capacity is being burned, and proposes the fix that
+saves the review. Three Gemini agents on Google Cloud ADK, querying ClickHouse
+through the official `mcp-clickhouse` server.
 
 - **Live supervisor:** https://cinetrace-781071502822.us-central1.run.app
 - **Demo video:** https://vimeo.com/1220287055
@@ -26,11 +26,13 @@ This is not a fixture. The demo runs against a synthetic but studio-scale farm:
 
 | | |
 | --- | --- |
-| `frame_samples` | **235M rows** — one telemetry sample per job every 12s of wall time |
+| `frame_samples` | **240M rows** — one telemetry sample per job every 12s of wall time, capped by a 100-day TTL at roughly a quarter-billion |
 | `render_jobs` | **198k jobs** across 90 days, 6 shows, 240 render hosts |
-| `farm_minute` | **802k rows** — incremental rollup kept current by a materialized view |
+| `farm_minute` | **850k rows** — incremental rollup kept current by a materialized view |
 | `error_embeddings` | 494 past incidents with Vertex AI embeddings |
-| On disk | 3.6 GB |
+| On disk | 3.7 GB |
+
+The live ticker keeps writing, so these grow a little every day.
 
 It is generated inside ClickHouse (`INSERT ... SELECT ... FROM numbers_mt`), so
 a full rebuild takes about twenty minutes and is reproducible byte for byte.
@@ -40,7 +42,7 @@ a full rebuild takes about twenty minutes and is reproducible byte for byte.
 ```mermaid
 flowchart TB
     subgraph ch [ClickHouse Cloud]
-        FS[("frame_samples · 235M rows")]
+        FS[("frame_samples · 240M rows")]
         RJ[("render_jobs · 198k")]
         SH[("shots · delivery deadlines")]
         MV[["farm_minute · AggregatingMergeTree"]]
@@ -90,11 +92,12 @@ ported to Postgres. This one would not:
 
 - **`ASOF LEFT JOIN`** pairs each OOM failure with the nearest telemetry sample
   recorded *before* it died: *"job-live-90003 died 20 seconds after rnd-f16 hit
-  97% VRAM."* Scans 2.2M rows in ~114ms. No other engine expresses "the row just
-  before this moment" in a single join.
+  97% VRAM."* Bounds and a `(host, ts)` projection keep it to 2.2M rows out of a
+  quarter-billion. No other engine expresses "the row just before this moment"
+  in a single join.
 - **Materialized view into `AggregatingMergeTree`** keeps a per-minute rollup
-  current on insert, so the dashboard reads 802k pre-aggregated rows instead of
-  235M raw ones.
+  current on insert, so the dashboard reads 850k pre-aggregated rows instead of
+  a quarter-billion raw ones.
 - **`quantileTDigest` cohort baselines** replaced the old `cpu_hours >= 100`
   rule. An arnold CPU job legitimately burns 10x the hours of a redshift GPU job
   for the same shot, so "overrun" is defined as crossing a robust upper fence,
@@ -104,8 +107,8 @@ ported to Postgres. This one would not:
 - **Vector search** with `cosineDistance` over Vertex AI embeddings: describe a
   failure in plain language and the archive returns the incident that matches by
   *meaning*, with the fix that closed it.
-- **Projections, skip indexes, TTL** on the fact table, because 235M rows with a
-  live writer needs a retention story.
+- **Projections, skip indexes, TTL** on the fact table, because a quarter-billion
+  rows with a live writer needs a retention story.
 
 Every panel on the page reports what its query cost: rows scanned, milliseconds,
 rows per second.
@@ -146,7 +149,7 @@ cp .env.example .env          # fill CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD
 uv sync --extra dev
 
 uv run python -m cinetrace.clickhouse.apply       # schema, in filename order
-uv run python -m cinetrace.clickhouse.generate    # ~20 min, builds 235M rows
+uv run python -m cinetrace.clickhouse.generate    # ~20 min, builds ~235M rows
 uv run python -m cinetrace.clickhouse.embeddings  # embeds the incident archive
 uv run python -m cinetrace.clickhouse.health
 
