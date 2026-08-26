@@ -36,6 +36,9 @@ def test_thresholds_come_from_cohort_baselines_not_constants() -> None:
     assert "gpu_hours >= 50" not in all_sql
     assert "cohort_fence" in ALL_WASTE["overruns"]
     assert "FROM job_waste" in ALL_WASTE["failed"]
+    assert "count() OVER ()" in all_sql
+    assert "toFloat64(cohort_p50)" in ALL_WASTE["overruns"]
+    assert "toFloat64(cohort_fence)" in ALL_WASTE["overruns"]
 
 
 def test_root_cause_uses_asof_and_bounds_both_sides() -> None:
@@ -85,6 +88,28 @@ def test_live_panels_report_what_they_scanned() -> None:
     for panel in showcase["queries"]:
         assert panel["stats"]["rows_read"] > 0
         assert panel["stats"]["elapsed_ms"] >= 0
+        assert "total_matches" not in panel["columns"]
+        assert panel["total_matches"] >= panel["count"]
+        for row in panel["rows"]:
+            assert "total_matches" not in row
+
+
+@needs_clickhouse
+def test_overrun_cohort_values_are_three_decimals() -> None:
+    """quantileTDigest is Float32; round() without a widening cast leaks junk."""
+    from cinetrace.clickhouse.queries import fetch_waste_showcase
+
+    overruns = next(q for q in fetch_waste_showcase()["queries"] if q["id"] == "overruns")
+    if not overruns["rows"]:
+        pytest.skip("no overruns in the current 7-day window")
+    for row in overruns["rows"]:
+        for key in ("cohort_p50", "cohort_fence", "hours_per_frame"):
+            value = row[key]
+            if value is None:
+                continue
+            text = f"{float(value):.10f}".rstrip("0")
+            decimals = len(text.split(".")[1]) if "." in text else 0
+            assert decimals <= 3, f"{key}={value!r} still carries Float32 noise"
 
 
 @needs_clickhouse

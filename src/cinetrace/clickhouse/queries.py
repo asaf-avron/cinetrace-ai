@@ -69,7 +69,8 @@ shots  (delivery schedule)
 
 FAILED = """
 SELECT job_id, show, shot, renderer, host, error_class, retry_count,
-       round(cpu_hours, 1) AS cpu_hours, round(gpu_hours, 1) AS gpu_hours
+       round(cpu_hours, 1) AS cpu_hours, round(gpu_hours, 1) AS gpu_hours,
+       count() OVER () AS total_matches
 FROM job_waste
 WHERE waste_class = 'failed' AND is_open
 ORDER BY (cpu_hours + gpu_hours) DESC, job_id
@@ -78,7 +79,8 @@ LIMIT 25
 
 RETRY_LOOPS = """
 SELECT job_id, show, shot, renderer, host, error_class, retry_count,
-       round(cpu_hours + gpu_hours, 1) AS burned_hours
+       round(cpu_hours + gpu_hours, 1) AS burned_hours,
+       count() OVER () AS total_matches
 FROM job_waste
 WHERE retry_loop AND is_open
 ORDER BY retry_count DESC, burned_hours DESC
@@ -87,7 +89,8 @@ LIMIT 25
 
 IDLE_QUEUE = """
 SELECT job_id, show, shot, renderer, queue_wait_seconds,
-       round(queue_wait_seconds / 3600, 1) AS slot_hours_held
+       round(queue_wait_seconds / 3600, 1) AS slot_hours_held,
+       count() OVER () AS total_matches
 FROM job_waste
 WHERE waste_class = 'idle_queue'
 ORDER BY queue_wait_seconds DESC, job_id
@@ -98,7 +101,8 @@ ZOMBIES = """
 SELECT job_id, show, shot, renderer, host, started_at,
        round(dateDiff('second', started_at, now('UTC')) / 3600, 1) AS age_hours,
        round(cpu_hours, 1) AS cpu_hours, round(gpu_hours, 1) AS gpu_hours,
-       frames_done, frames_total
+       frames_done, frames_total,
+       count() OVER () AS total_matches
 FROM job_waste
 WHERE waste_class = 'zombie'
 ORDER BY started_at ASC, job_id
@@ -112,10 +116,11 @@ LIMIT 25
 OVERRUNS = """
 SELECT job_id, show, shot, renderer,
        round(hours_per_frame, 3) AS hours_per_frame,
-       round(cohort_p50, 3) AS cohort_p50,
-       round(cohort_fence, 3) AS cohort_fence,
+       round(toFloat64(cohort_p50), 3) AS cohort_p50,
+       round(toFloat64(cohort_fence), 3) AS cohort_fence,
        round(hours_per_frame / nullIf(cohort_p50, 0), 1) AS x_over_cohort,
-       round(cpu_hours + gpu_hours, 1) AS total_hours
+       round(cpu_hours + gpu_hours, 1) AS total_hours,
+       count() OVER () AS total_matches
 FROM job_waste
 WHERE waste_class = 'overrun'
   AND coalesce(ended_at, started_at) >= now('UTC') - INTERVAL 7 DAY
@@ -404,6 +409,13 @@ def run_with_stats(
 
 def _panel(client: Any, name: str, sql: str) -> dict[str, Any]:
     rows, columns, stats = run_with_stats(client, sql)
+    total = 0
+    if "total_matches" in columns:
+        columns = [c for c in columns if c != "total_matches"]
+        if rows:
+            total = int(rows[0].get("total_matches") or 0)
+        for row in rows:
+            row.pop("total_matches", None)
     return {
         "id": name,
         "label": CATEGORY_LABELS.get(name, name),
@@ -413,6 +425,7 @@ def _panel(client: Any, name: str, sql: str) -> dict[str, Any]:
         "columns": columns,
         "rows": rows,
         "count": len(rows),
+        "total_matches": total or len(rows),
         "stats": stats,
     }
 

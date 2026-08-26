@@ -214,7 +214,7 @@ below; the thumbnail should be the first one.
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
 | `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. Bounds and a (host, ts) projection keep it to 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |
-| `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. Thresholds are per-cohort tDigest fences, not constants. |
+| `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. The badge is the real match count, not the LIMIT. Thresholds are per-cohort tDigest fences, not constants. |
 | `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. |
 | `09-full-page.png` | The whole supervisor. |
 

@@ -12,7 +12,9 @@ const state = {
   running: false,
   runStarted: 0,
   tick: null,
+  hideBar: null,
   mcpCalls: [],
+  timelineSteps: [],
   sentinelPasses: 0,
   engine: null,
 };
@@ -191,29 +193,37 @@ function renderImpact(impact) {
 
 // ----------------------------------------------------------------- detection
 
+function wasteBadge(q) {
+  const shown = (q.rows || []).length;
+  const total = q.total_matches || q.count || shown;
+  if (total > shown) return `${shown} of ${nf.format(total)} matching`;
+  return `${shown} row${shown === 1 ? "" : "s"}`;
+}
+
 function renderWaste(data) {
   if (!data) return;
   $("waste-queries").innerHTML = (data.queries || []).map((q) => `
     <article class="query-panel" id="panel-${esc(q.id)}">
       <header>
         <h3>${esc(q.label)}</h3>
-        <span class="query-count">${q.count} row${q.count === 1 ? "" : "s"}</span>
+        <span class="query-count">${wasteBadge(q)}</span>
       </header>
       <p class="panel-lead">${esc(q.note)} <span class="stat-badge">${statBadge(q.stats)}</span></p>
       <pre><code>${esc(q.sql)}</code></pre>
-      ${renderTable(q.columns, q.rows)}
+      ${renderTable(q.columns, q.rows, true)}
     </article>`).join("");
 }
 
-function renderTable(columns, rows) {
+function renderTable(columns, rows, scroll) {
   if (!rows || !rows.length) return `<p class="empty">No rows.</p>`;
   const head = columns.map((c) => `<th>${esc(c)}</th>`).join("");
-  const body = rows.slice(0, 12).map((row) => {
+  const body = rows.map((row) => {
     const hot = state.highlighted.has(String(row.job_id || "").toLowerCase());
     const cells = columns.map((c) => `<td>${esc(row[c])}</td>`).join("");
     return `<tr class="${hot ? "hit" : ""}">${cells}</tr>`;
   }).join("");
-  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const wrap = scroll ? "table-wrap table-scroll" : "table-wrap";
+  return `<div class="${wrap}"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 // ---------------------------------------------------------------- root cause
@@ -356,30 +366,59 @@ const ROLE_COPY = {
   remediate: "Dry-run",
 };
 
-function timelineItem(s, passes) {
+function timelineBody(s) {
   return `
-    <li class="timeline-step ${esc(s.agent)}">
+      <div class="step-text">${mdLite(s.text)}</div>
+      ${s.job_ids && s.job_ids.length
+        ? `<p class="step-jobs">${s.job_ids.map((j) => `<code>${esc(j)}</code>`).join(" ")}</p>`
+        : ""}`;
+}
+
+function timelineItem(s, passes, collapsed) {
+  const head = `
       <div class="step-head">
         <span class="step-role">${esc(ROLE_COPY[s.role] || s.role)}</span>
         <span class="step-agent">${esc(s.label)}</span>
         ${s.pass ? `<span class="step-pass">pass ${s.pass} of ${passes || s.pass}</span>` : ""}
-      </div>
-      <div class="step-text">${mdLite(s.text)}</div>
-      ${s.job_ids && s.job_ids.length
-        ? `<p class="step-jobs">${s.job_ids.map((j) => `<code>${esc(j)}</code>`).join(" ")}</p>`
-        : ""}
+      </div>`;
+  if (collapsed) {
+    return `
+    <li class="timeline-step ${esc(s.agent)} collapsed">
+      ${head}
+      <details class="pass-fold">
+        <summary>Show pass ${s.pass}</summary>
+        ${timelineBody(s)}
+      </details>
     </li>`;
+  }
+  return `
+    <li class="timeline-step ${esc(s.agent)}">
+      ${head}
+      ${timelineBody(s)}
+    </li>`;
+}
+
+function lastSentinelPass(steps) {
+  let last = 0;
+  for (const s of steps || []) {
+    if (s.agent === "sentinel" && s.pass) last = Math.max(last, s.pass);
+  }
+  return last;
 }
 
 function renderTimeline(steps, passes) {
   if (!steps || !steps.length) return;
-  $("timeline").innerHTML = steps.map((s) => timelineItem(s, passes)).join("");
+  state.timelineSteps = steps;
+  const latest = lastSentinelPass(steps);
+  $("timeline").innerHTML = steps.map((s) => {
+    const superseded = s.agent === "sentinel" && s.pass && latest && s.pass < latest;
+    return timelineItem(s, passes, superseded);
+  }).join("");
 }
 
 function appendTimelineStep(s, passes) {
-  const list = $("timeline");
-  if (list.querySelector(".timeline-empty")) list.innerHTML = "";
-  list.insertAdjacentHTML("beforeend", timelineItem(s, passes));
+  state.timelineSteps.push(s);
+  renderTimeline(state.timelineSteps, passes);
 }
 
 function mcpItem(c, open) {
@@ -425,28 +464,53 @@ function appendMcp(call) {
 }
 
 function renderCost(cost, engine, fallback) {
-  const el = $("cost-meter");
-  if (!cost || !cost.model_calls) { el.hidden = true; return; }
   const which = engine || state.engine;
   const where = which === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
-  el.hidden = false;
-  el.innerHTML =
+  const html = !cost || !cost.model_calls ? "" :
     `This run: <strong>$${cost.usd.toFixed(4)}</strong> of ${esc(cost.model || "gemini-2.5-flash")} ` +
     `(${compact(cost.input_tokens)} in / ${compact(cost.output_tokens)} out, ` +
     `${cost.model_calls} calls, ${cost.elapsed_s}s) on ${where}.` +
     (fallback ? ` <span class="dim">${esc(fallback)}</span>` : "");
+  for (const id of ["cost-meter", "run-cost"]) {
+    const el = $(id);
+    if (!el) continue;
+    el.hidden = !html;
+    if (html) el.innerHTML = html;
+  }
 }
 
 // ----------------------------------------------------------------- live feed
 
 // ?nolive suppresses the stream. An open EventSource means the page never
 // reaches a settled state, which hangs headless capture for screenshots.
+function paintLive(snap) {
+  const pill = $("live-pill");
+  const label = $("live-label");
+  pill.dataset.state = "live";
+  label.innerHTML =
+    `<strong>${nf.format(snap.running || 0)}</strong> jobs rendering · ` +
+    `<strong>${nf.format(snap.hosts_active || 0)}</strong> hosts · ` +
+    `${compact(snap.samples)} samples · ` +
+    `<strong>${money(snap.open_waste_usd)}</strong> burning`;
+  renderScale({ ...(state.scale || {}), samples: snap.samples, jobs: snap.jobs });
+}
+
 function connectLive() {
   const pill = $("live-pill");
   const label = $("live-label");
   if (new URLSearchParams(location.search).has("nolive")) {
-    pill.dataset.state = "off";
-    label.textContent = "live feed paused";
+    getJSON("/api/health").then((health) => {
+      const snap = (health.live && health.live.last_snapshot) || {};
+      if (!snap.samples && !snap.running) {
+        pill.dataset.state = "off";
+        label.textContent = "live feed paused";
+        return;
+      }
+      paintLive(snap);
+    }).catch(() => {
+      pill.dataset.state = "off";
+      label.textContent = "live feed paused";
+    });
     return;
   }
   let source;
@@ -461,13 +525,7 @@ function connectLive() {
   source.onmessage = (event) => {
     let snap;
     try { snap = JSON.parse(event.data); } catch { return; }
-    pill.dataset.state = "live";
-    label.innerHTML =
-      `<strong>${nf.format(snap.running || 0)}</strong> jobs rendering · ` +
-      `<strong>${nf.format(snap.hosts_active || 0)}</strong> hosts · ` +
-      `${compact(snap.samples)} samples · ` +
-      `<strong>${money(snap.open_waste_usd)}</strong> burning`;
-    renderScale({ ...(state.scale || {}), samples: snap.samples, jobs: snap.jobs });
+    paintLive(snap);
   };
 
   source.onerror = () => {
@@ -506,9 +564,32 @@ async function decide(button) {
   }
 }
 
+function setRunStatus(text) {
+  const el = $("run-status");
+  if (el) el.textContent = text;
+}
+
+function showRunBar() {
+  if (state.hideBar) {
+    clearTimeout(state.hideBar);
+    state.hideBar = null;
+  }
+  $("run-bar").hidden = false;
+  document.body.classList.add("run-active");
+}
+
+function hideRunBar() {
+  if (state.hideBar) {
+    clearTimeout(state.hideBar);
+    state.hideBar = null;
+  }
+  $("run-bar").hidden = true;
+  document.body.classList.remove("run-active");
+}
+
 function setStepper(role, pass) {
   const stepper = $("run-stepper");
-  $("nav-run").hidden = false;
+  showRunBar();
   const order = ["detect", "decide", "remediate"];
   const idx = order.indexOf(role);
   stepper.querySelectorAll("li").forEach((li) => {
@@ -555,10 +636,14 @@ function applyComplete(data) {
   renderProposals(data.proposals);
   renderQueryLog(data.query_log);
   const pending = (data.proposals || []).filter((p) => p.decision === "pending").length;
-  $("status").textContent =
+  const done =
     `Run ${data.run_id} complete. ${(data.mcp_calls || []).length} MCP queries, ` +
     `${pending} proposals awaiting approval.`;
+  $("status").textContent = done;
+  const elapsed = $("run-elapsed").textContent || "";
+  setRunStatus(elapsed ? `complete, ${elapsed}` : done);
   setStepper("remediate");
+  state.hideBar = setTimeout(hideRunBar, 4000);
   $("proposals-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -567,26 +652,26 @@ function applyFrame(frame) {
     case "engine": {
       state.engine = frame.engine;
       const where = frame.engine === "agent_engine" ? "Vertex Agent Engine" : "in-process ADK";
-      $("status").textContent = `Running on ${where}…`;
+      setRunStatus(`Running on ${where}…`);
       break;
     }
     case "stage": {
       if (frame.pass) state.sentinelPasses = Math.max(state.sentinelPasses, frame.pass);
       setStepper(frame.role, frame.pass);
       const pass = frame.pass ? ` · pass ${frame.pass}` : "";
-      $("status").textContent = `${frame.label}${pass} is working…`;
+      setRunStatus(`${frame.label}${pass} is working…`);
       break;
     }
     case "query":
       appendMcp(frame);
-      $("status").textContent = `${frame.label} wrote a query (${state.mcpCalls.length} so far)`;
+      setRunStatus(`${frame.label} wrote a query (${state.mcpCalls.length} so far)`);
       break;
     case "step":
       if (frame.job_ids) {
         for (const job of frame.job_ids) state.highlighted.add(String(job).toLowerCase());
       }
       appendTimelineStep(frame, state.sentinelPasses || frame.pass);
-      $("status").textContent = `${frame.label} reported.`;
+      setRunStatus(`${frame.label} reported.`);
       break;
     case "cost":
       renderCost(frame, state.engine, "");
@@ -629,14 +714,16 @@ async function runSupervisor() {
   const button = $("run");
   button.disabled = true;
   state.mcpCalls = [];
+  state.timelineSteps = [];
   state.sentinelPasses = 0;
   state.engine = null;
   $("timeline").innerHTML = "";
   $("mcp-calls").innerHTML = "";
   $("mcp-note").textContent = "The Sentinel is composing SQL now.";
   setStepper("detect");
-  $("status").textContent =
-    "Detecting… the Sentinel is writing its own SQL against a quarter-billion telemetry rows.";
+  setRunStatus(
+    "Detecting… the Sentinel is writing its own SQL against a quarter-billion telemetry rows.",
+  );
   startElapsed();
   $("agents").scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -663,6 +750,7 @@ async function runSupervisor() {
       applyComplete(await response.json());
     }
   } catch (err) {
+    hideRunBar();
     $("status").textContent = err.message;
   } finally {
     stopElapsed();
@@ -729,7 +817,7 @@ async function load() {
 function applySolo() {
   const solo = new URLSearchParams(location.search).get("solo");
   if (!solo || !$(solo)) return;
-  document.querySelectorAll("body > section, body > header, body > footer, body > nav, body > .back-top")
+  document.querySelectorAll("body > section, body > header, body > footer, body > nav, body > .run-bar, body > .back-top")
     .forEach((el) => { if (el !== $(solo)) el.hidden = true; });
 }
 
