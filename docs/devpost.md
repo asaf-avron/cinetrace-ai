@@ -208,7 +208,7 @@ below; the thumbnail should be the first one.
 
 | File | Caption |
 | --- | --- |
-| `01-dailies-at-risk.png` | The headline is delivery, not cost: 3 shots will miss review, and all 3 come back if the 42 GPU slots held by zombie and idle-queue jobs are released. 239.7M telemetry rows behind it. |
+| `01-dailies-at-risk.png` | The headline is delivery, not cost: shots that will miss review, and how many come back if the stuck GPU slots are released. A quarter-billion telemetry rows behind it. |
 | `02-impact-and-waste.png` | Open waste is what an agent can still change. The 90-day figure sizes the problem. Approval, not detection, moves the number. |
 | `03-three-agents.png` | Detect → decide → act as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator ties each job to the review it protects. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
