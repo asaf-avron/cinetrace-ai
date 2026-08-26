@@ -41,3 +41,4 @@ Thumbs.db
 src/cinetrace_tmp*/
 *.log
 docs/demo/*.mp4
+.scratch/

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Regenerate docs/screenshots from a running supervisor.
 #
+# Recapture policy (also in AGENTS.md): never write here while iterating.
+# Use .scratch/ for mid-work captures. Verify with curl / grep, not images.
+# Run this script exactly once after UI work is merged and deployed.
+#
 # Uses ?solo=<section-id> so each image is exactly one section: headless Chrome
 # ignores scroll position, so the alternative is cropping a tall screenshot at
 # hardcoded pixel offsets, which break the moment an agent writes a longer

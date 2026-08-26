@@ -138,7 +138,7 @@ SELECT
     round(w.waste_gpu_hours, 1) AS gpu_hours_wasted,
     round(w.waste_cpu_hours * {{cpu:Float64}} + w.waste_gpu_hours * {{gpu:Float64}}, 2) AS waste_usd,
     round(w.hours_per_frame, 3) AS hours_per_frame,
-    round(w.cohort_p50, 3) AS cohort_p50,
+    round(toFloat64(w.cohort_p50), 3) AS cohort_p50,
     w.frames_done AS frames_done,
     w.frames_total AS frames_total,
     coalesce(d.decision, 'none') AS decision

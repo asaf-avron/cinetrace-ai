@@ -12,10 +12,11 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
    `live.ticks` increasing.
 2. `uv run python -m cinetrace.clickhouse.reset_proposals` so the Impact card
    starts unrecovered and the Approve beat has somewhere to go.
-3. Load the page and click **Run supervisor**. The run now streams: the
-   Detect → Decide → Dry-run stepper lights up and each SQL statement appears
-   as the Sentinel writes it. Hold on that. After it finishes, reload once so
-   `/api/last-run` keeps the evidence on screen for the rest of the cut.
+3. Load the page and click **Run supervisor**. The run now streams: a sticky
+   run bar docks under the nav with Detect → Decide → Dry-run, the elapsed
+   timer, and the live status. Each SQL statement appears as the Sentinel
+   writes it. Hold on the bar and the MCP list. After it finishes the bar
+   hides; reload once so `/api/last-run` keeps the evidence on screen.
 4. Browser at 1600px wide, dark OS theme, no bookmarks bar, no extensions.
 5. Check "Dailies at risk" shows a handful, not zero and not forty.
 
@@ -41,8 +42,8 @@ Pan across the scale strip. Point at the live pill counting up.
 
 **0:35–1:05 — The agents, and the SQL they write live**
 
-Stay on the three-agent panel while the run is in flight. The stepper and the
-SQL list are the shot — do not cut away to a spinner.
+Stay on the three-agent panel while the run is in flight. The run bar under
+the nav and the SQL list are the shot — do not cut away to a spinner.
 
 > "Three Gemini agents on Google Cloud ADK. The Sentinel isn't given queries —
 > it's given the schema and a goal, and it writes its own SQL through the

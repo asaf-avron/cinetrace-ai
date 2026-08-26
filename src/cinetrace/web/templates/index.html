@@ -24,20 +24,25 @@
         <li><a href="#farm-hours">Farm</a></li>
         <li><a href="#proposals-section">Proposals</a></li>
       </ul>
-      <div class="nav-run" id="nav-run" hidden>
-        <ol class="run-stepper" id="run-stepper">
-          <li data-role="detect">Detect</li>
-          <li data-role="decide">Decide</li>
-          <li data-role="remediate">Dry-run</li>
-        </ol>
-        <span class="run-elapsed" id="run-elapsed"></span>
-      </div>
       <div class="live-pill" id="live-pill" data-state="idle">
         <span class="live-dot"></span>
         <span id="live-label">connecting to farm</span>
       </div>
     </div>
   </nav>
+
+  <div class="run-bar" id="run-bar" hidden>
+    <div class="run-bar-inner">
+      <ol class="run-stepper" id="run-stepper">
+        <li data-role="detect">Detect</li>
+        <li data-role="decide">Decide</li>
+        <li data-role="remediate">Dry-run</li>
+      </ol>
+      <span class="run-elapsed" id="run-elapsed"></span>
+      <span class="run-status" id="run-status"></span>
+      <span class="cost-meter" id="run-cost" hidden></span>
+    </div>
+  </div>
 
   <header class="masthead" id="top">
     <div class="masthead-copy">
@@ -246,7 +251,7 @@
   <section id="live-jobs">
     <h2>Live farm</h2>
     <p class="panel-lead">Open waste first, then the freshest activity. 198k jobs in the table; these are the ones that matter.</p>
-    <div class="table-wrap">
+    <div class="table-wrap table-scroll">
       <table>
         <thead>
           <tr>
