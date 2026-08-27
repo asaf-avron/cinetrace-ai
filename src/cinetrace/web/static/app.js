@@ -81,10 +81,17 @@ function mdLite(text) {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+// ClickHouse hands back DateTime64(3, 'UTC') as a bare ISO string with no
+// offset, and JS parses an offset-less date-time as local time. Reading that
+// back out through toISOString() then shifts it by the viewer's own offset, so
+// a proposal filed at 09:56 UTC renders as 16:56 to a judge in California --
+// an audit row dated in the future. Mark the string UTC before parsing it.
 function shortTime(value) {
   if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value).slice(0, 16);
+  const raw = String(value);
+  const iso = /(Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : `${raw.replace(" ", "T")}Z`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 16);
   return d.toISOString().slice(5, 16).replace("T", " ");
 }
 
@@ -171,7 +178,9 @@ function renderImpact(impact) {
         ? `${open.pending_jobs} proposal(s) awaiting approval — approve below to move this number`
         : "No proposals yet. Run the supervisor.");
 
+  const days = hist.days || 0;
   $("impact-history").textContent = money(hist.usd);
+  $("impact-history-unit").textContent = days ? `in ${nf.format(days)} days` : "";
   $("impact-history-sub").textContent =
     `${nf.format(hist.job_count || 0)} wasteful jobs out of ${nf.format(hist.total_jobs || 0)} · ` +
     `${money(hist.annualized_usd)} annualised`;
@@ -187,7 +196,7 @@ function renderImpact(impact) {
       <span class="waste-count">${nf.format(c.open_count)}</span>
       <span class="waste-name">${esc(c.category.replace("_", " "))}</span>
       <span class="waste-usd">${money(c.open_usd)} open</span>
-      <span class="waste-total">${money(c.waste_usd)} in 90d</span>
+      <span class="waste-total">${money(c.waste_usd)}${days ? ` in ${days}d` : ""}</span>
     </a>`).join("");
 }
 
@@ -564,9 +573,15 @@ async function decide(button) {
   }
 }
 
+// The run bar narrates the run, but the toolbar line sits directly under the
+// Run button, and below 900px the bar's text is hidden altogether. Mirroring
+// keeps the toolbar from insisting the page is "showing run <older id>" while a
+// newer one is mid-flight. applyComplete overwrites it afterwards with the
+// longer summary, so mirror first and set the final line second.
 function setRunStatus(text) {
   const el = $("run-status");
   if (el) el.textContent = text;
+  $("status").textContent = text;
 }
 
 function showRunBar() {
@@ -639,9 +654,9 @@ function applyComplete(data) {
   const done =
     `Run ${data.run_id} complete. ${(data.mcp_calls || []).length} MCP queries, ` +
     `${pending} proposals awaiting approval.`;
-  $("status").textContent = done;
   const elapsed = $("run-elapsed").textContent || "";
   setRunStatus(elapsed ? `complete, ${elapsed}` : done);
+  $("status").textContent = done;
   setStepper("remediate");
   state.hideBar = setTimeout(hideRunBar, 4000);
   $("proposals-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -720,6 +735,10 @@ async function runSupervisor() {
   $("timeline").innerHTML = "";
   $("mcp-calls").innerHTML = "";
   $("mcp-note").textContent = "The Sentinel is composing SQL now.";
+  // The last-run replay leaves a dollar figure in both meters. It says "This
+  // run", so it has to go before the bar appears, not when the cost frame
+  // finally lands near the end.
+  renderCost(null);
   setStepper("detect");
   setRunStatus(
     "Detecting… the Sentinel is writing its own SQL against a quarter-billion telemetry rows.",

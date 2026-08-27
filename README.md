@@ -27,7 +27,7 @@ This is not a fixture. The demo runs against a synthetic but studio-scale farm:
 | | |
 | --- | --- |
 | `frame_samples` | **240M rows** — one telemetry sample per job every 12s of wall time, capped by a 100-day TTL at roughly a quarter-billion |
-| `render_jobs` | **198k jobs** across 90 days, 6 shows, 240 render hosts |
+| `render_jobs` | **198k jobs** across three months, 6 shows, 240 render hosts |
 | `farm_minute` | **850k rows** — incremental rollup kept current by a materialized view |
 | `error_embeddings` | 494 past incidents with Vertex AI embeddings |
 | On disk | 3.7 GB |
@@ -119,8 +119,10 @@ Two numbers, because they answer different questions.
 
 **Open** is what an agent can still change: zombies holding GPUs, idle-queue
 entries holding reserved slots, and failures from the last 48 hours that will be
-resubmitted into the same wall. **Historical** prices the same rules across all
-90 days — nobody can recover it, it exists to size the problem.
+resubmitted into the same wall. **Historical** prices the same rules across the
+farm's whole retained history — nobody can recover it, it exists to size the
+problem. The page measures that span rather than assuming it, because the live
+ticker lengthens it every day.
 
 A completed overrun is never "open". The hours are spent and no action reclaims
 them, so counting them as actionable would be dishonest arithmetic.

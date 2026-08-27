@@ -124,7 +124,7 @@
       </div>
       <div class="impact-history">
         <p class="impact-label">Same pricing over the farm's full history</p>
-        <p class="impact-history-usd"><span id="impact-history">—</span> <span class="impact-history-unit">in 90 days</span></p>
+        <p class="impact-history-usd"><span id="impact-history">—</span> <span class="impact-history-unit" id="impact-history-unit"></span></p>
         <p class="impact-sub" id="impact-history-sub"></p>
       </div>
       <p class="impact-note" id="impact-note"></p>
@@ -225,7 +225,7 @@
       <p class="panel-lead" id="query-log-note">Recent queries on this service that touched the farm tables.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>when</th><th>user</th><th>rows read</th><th>ms</th><th>query</th></tr></thead>
+          <thead><tr><th>when (UTC)</th><th>user</th><th>rows read</th><th>ms</th><th>query</th></tr></thead>
           <tbody id="query-log"></tbody>
         </table>
       </div>
@@ -274,7 +274,7 @@
       <table>
         <thead>
           <tr>
-            <th>when</th><th>job</th><th>action</th><th>protects</th>
+            <th>when (UTC)</th><th>job</th><th>action</th><th>protects</th>
             <th>evidence</th><th>decision</th><th></th>
           </tr>
         </thead>

@@ -43,8 +43,8 @@ agents on Google Cloud ADK run a fixed detect → decide → act pipeline:
   schedule. Waste that threatens a client review outranks waste that only costs
   money, so a zombie on a show with a review in five hours beats a bigger
   overrun on a show with a review tomorrow.
-- The **Action Agent** records dry-run remediations with the evidence and the
-  shot each one protects.
+- The **Action Agent** records dry-run remediations with the evidence and, when
+  the job is blocking a delivery, the shot it protects.
 
 Nothing reaches a render host. A proposal is an auditable record, and the dollar
 figure on the page only moves when a human clicks Approve — an agent finding
@@ -53,7 +53,8 @@ waste does not reduce your bill, a supervisor approving the fix does.
 The farm is live while you watch it: a background ticker writes fresh telemetry
 every 30 seconds and the page streams updates over SSE.
 
-**Scale:** 240M frame samples, 198k render jobs, 240 hosts, 94 days, 3.7 GB.
+**Scale:** 240M frame samples, 198k render jobs, 240 hosts, three months of
+history, 3.7 GB.
 The ticker keeps writing, so the live page reads higher every day until the
 100-day TTL parks it around a quarter of a billion rows.
 
@@ -209,8 +210,8 @@ below; the thumbnail should be the first one.
 | File | Caption |
 | --- | --- |
 | `01-dailies-at-risk.png` | The headline is delivery, not cost: shots that will miss review, and how many come back if the stuck GPU slots are released. A quarter-billion telemetry rows behind it. |
-| `02-impact-and-waste.png` | Open waste is what an agent can still change. The 90-day figure sizes the problem. Approval, not detection, moves the number. |
-| `03-three-agents.png` | Detect → decide → act as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator ties each job to the review it protects. |
+| `02-impact-and-waste.png` | Open waste is what an agent can still change. The full-history figure sizes the problem, annualised against the span actually measured. Approval, not detection, moves the number. |
+| `03-three-agents.png` | Detect → decide → dry-run as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator names the review a fix protects — and says so plainly when it protects none. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
 | `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. Bounds and a (host, ts) projection keep it to 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |

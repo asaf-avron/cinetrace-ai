@@ -57,6 +57,14 @@ def test_top_open_is_bounded() -> None:
     assert "WHERE w.is_open" in TOP_OPEN
 
 
+def test_history_span_is_measured_not_assumed() -> None:
+    """The historical sum has no date bound, so it covers whatever the farm
+    holds. Annualising that against a hardcoded 90 overstates the yearly figure
+    by more every day the ticker runs.
+    """
+    assert "dateDiff('day', min(started_at), now('UTC'))" in TOTALS
+
+
 @needs_clickhouse
 def test_live_impact_shape() -> None:
     from cinetrace.clickhouse.impact import fetch_impact
@@ -66,7 +74,7 @@ def test_live_impact_shape() -> None:
     history = impact["historical"]
 
     assert history["total_jobs"] > 100_000, "the farm should be at studio scale"
-    assert history["usd"] > open_now["usd"], "90 days must exceed what is open now"
+    assert history["usd"] > open_now["usd"], "all history must exceed what is open now"
     assert open_now["remaining_usd"] == pytest.approx(
         open_now["usd"] - open_now["approved_usd"], abs=0.02
     )
@@ -74,6 +82,18 @@ def test_live_impact_shape() -> None:
     assert {c["category"] for c in impact["categories"]} == {
         "failed", "retry_loops", "idle_queue", "zombies", "overruns",
     }
+
+
+@needs_clickhouse
+def test_annualised_figure_divides_by_the_span_it_summed() -> None:
+    from cinetrace.clickhouse.impact import fetch_impact
+
+    history = fetch_impact(top_n=1)["historical"]
+    days = history["days"]
+    assert days >= 90, "the seed lays down about three months of jobs"
+    assert history["annualized_usd"] == pytest.approx(
+        history["usd"] * 365 / days, rel=0.01
+    )
 
 
 @needs_clickhouse

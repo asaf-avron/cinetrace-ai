@@ -10,8 +10,9 @@ Two numbers, because they answer different questions:
   holding reserved slots, failures and overruns from the last 48 hours. This is
   what an agent can still do something about, and it is the number that moves
   when a human approves a remediation.
-- **historical** — the same pricing over the full 90 days in the farm. Nobody
-  can recover it; it exists to size the problem honestly.
+- **historical** — the same pricing over however much history the farm holds,
+  measured rather than assumed. Nobody can recover it; it exists to size the
+  problem honestly.
 
 Rate assumptions (studio-lot ballpark for the judge narrative, not a quote):
 
@@ -38,7 +39,8 @@ from cinetrace.clickhouse.queries import run_with_stats
 
 GPU_HOUR_USD = 3.50
 CPU_HOUR_USD = 0.12
-HISTORY_DAYS = 90
+# Only used if the farm is empty and dateDiff has nothing to measure.
+HISTORY_DAYS_FALLBACK = 90
 
 CATEGORY_ORDER = ("failed", "retry_loops", "idle_queue", "zombies", "overruns")
 
@@ -85,7 +87,13 @@ SELECT
 
     round(sumIf({_USD}, waste_class != 'healthy'), 2) AS historical_usd,
     round(sumIf(waste_cpu_hours, waste_class != 'healthy'), 1) AS historical_cpu_hours,
-    round(sumIf(waste_gpu_hours, waste_class != 'healthy'), 1) AS historical_gpu_hours
+    round(sumIf(waste_gpu_hours, waste_class != 'healthy'), 1) AS historical_gpu_hours,
+
+    -- The historical sum has no date bound, so it covers however much history
+    -- the farm currently holds. The live ticker grows that every day up to the
+    -- 100-day TTL, so annualising against a hardcoded 90 would inflate the
+    -- figure by a few percent today and 11% once the window fills. Measure it.
+    greatest(dateDiff('day', min(started_at), now('UTC')), 1) AS history_days
 FROM job_waste
 """
 
@@ -199,6 +207,7 @@ def fetch_impact(top_n: int = 25) -> dict[str, Any]:
     approved_usd = _money(totals.get("approved_usd"))
     pending_usd = _money(totals.get("pending_usd"))
     historical_usd = _money(totals.get("historical_usd"))
+    history_days = int(totals.get("history_days") or HISTORY_DAYS_FALLBACK)
 
     return {
         "source": "clickhouse",
@@ -215,8 +224,8 @@ def fetch_impact(top_n: int = 25) -> dict[str, Any]:
         },
         "historical": {
             "usd": historical_usd,
-            "days": HISTORY_DAYS,
-            "annualized_usd": _money(historical_usd * 365 / HISTORY_DAYS),
+            "days": history_days,
+            "annualized_usd": _money(historical_usd * 365 / history_days),
             "job_count": int(totals.get("waste_jobs") or 0),
             "total_jobs": int(totals.get("total_jobs") or 0),
             "cpu_hours": _hours(totals.get("historical_cpu_hours")),
