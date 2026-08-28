@@ -44,7 +44,11 @@ agents on Google Cloud ADK run a fixed detect → decide → act pipeline:
   money, so a zombie on a show with a review in five hours beats a bigger
   overrun on a show with a review tomorrow.
 - The **Action Agent** records dry-run remediations with the evidence and, when
-  the job is blocking a delivery, the shot it protects.
+  the job is blocking a delivery, the shot it protects. That last claim is the
+  strongest thing the product says, so it is the one claim the model does not
+  get to assert unchecked: the shot is verified against the live delivery board
+  before the row is written, and a shot that is comfortably on track gets the
+  claim dropped rather than recorded.
 
 Nothing reaches a render host. A proposal is an auditable record, and the dollar
 figure on the page only moves when a human clicks Approve — an agent finding
@@ -211,12 +215,12 @@ below; the thumbnail should be the first one.
 | --- | --- |
 | `01-dailies-at-risk.png` | The headline is delivery, not cost: shots that will miss review, and how many come back if the stuck GPU slots are released. A quarter-billion telemetry rows behind it. |
 | `02-impact-and-waste.png` | Open waste is what an agent can still change. The full-history figure sizes the problem, annualised against the span actually measured. Approval, not detection, moves the number. |
-| `03-three-agents.png` | Detect → decide → dry-run as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator names the review a fix protects — and says so plainly when it protects none. |
+| `03-three-agents.png` | Detect → decide → dry-run as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator names the review each fix protects, and leaves it blank on the job that costs money but blocks no delivery. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
 | `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. Bounds and a (host, ts) projection keep it to 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |
 | `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. The badge is the real match count, not the LIMIT. Thresholds are per-cohort tDigest fences, not constants. |
-| `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. |
+| `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. The PROTECTS column is checked against the live delivery board, so a shot appears there only if it really is about to miss its review. |
 | `09-full-page.png` | The whole supervisor. |
 
 ## Built With
