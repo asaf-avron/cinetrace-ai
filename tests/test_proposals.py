@@ -79,7 +79,7 @@ def test_a_shot_that_still_makes_its_review_cannot_be_claimed_as_protected() -> 
         )
         assert result["persisted"], "the waste is real even when the shot claim is not"
         assert result["shot_at_risk"] == ""
-        assert "not currently projected to miss" in result["shot_at_risk_note"]
+        assert "protecting no delivery" in result["shot_at_risk_note"]
 
         client = get_client()
         try:
@@ -92,6 +92,29 @@ def test_a_shot_that_still_makes_its_review_cannot_be_claimed_as_protected() -> 
             client.close()
     finally:
         _cleanup(job_id)
+
+
+def test_a_multi_shot_claim_keeps_the_one_the_board_agrees_with() -> None:
+    """The Orchestrator writes prose, not a field.
+
+    A job blocking three shots comes through as "NEBULA sh0202, NEBULA sh0466,
+    NEBULA sh0471". Parsing that as a single SHOW/shot pair threw away a
+    correct claim and recorded the proposal as protecting nothing.
+    """
+    from cinetrace.clickhouse.proposals import _verify_shot
+
+    at_risk = frozenset({("NEBULA", "sh0466"), ("DRIFT", "sh0221")})
+
+    assert (
+        _verify_shot("NEBULA sh0202, NEBULA sh0466, NEBULA sh0471", at_risk)
+        == "NEBULA sh0466"
+    )
+    assert _verify_shot("DRIFT sh0221", at_risk) == "DRIFT sh0221"
+    assert _verify_shot("nebula/sh0466", at_risk) == "NEBULA sh0466"
+    assert _verify_shot("ORBIT sh0194", at_risk) == ""
+    assert _verify_shot("NEBULA sh0202, ORBIT sh0194", at_risk) == ""
+    assert _verify_shot("the NEBULA one", at_risk) == ""
+    assert _verify_shot("none", at_risk) == ""
 
 
 @needs_clickhouse
