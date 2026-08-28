@@ -11,6 +11,7 @@ integration, and it would read this table.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -54,11 +55,20 @@ def _shots_currently_at_risk() -> frozenset[tuple[str, str]]:
     return shots
 
 
-def _parse_shot(value: str) -> tuple[str, str] | None:
-    parts = value.replace("/", " ").split()
-    if len(parts) != 2:
-        return None
-    return parts[0].upper(), parts[1].lower()
+# The Orchestrator writes prose, not a field. It says "NEBULA sh0202, NEBULA
+# sh0466, NEBULA sh0471" when one job blocks three shots, and "ORBIT sh0194"
+# when it has talked itself into a shot that is fine. Pull every SHOW/shot pair
+# out and keep the first that the board agrees is actually at risk.
+_SHOT_RE = re.compile(r"([A-Za-z][A-Za-z0-9_-]*)[\s/]+(sh\d+)")
+
+
+def _verify_shot(value: str, at_risk: frozenset[tuple[str, str]]) -> str:
+    for show, shot in _SHOT_RE.findall(value):
+        key = (show.upper(), shot.lower())
+        if key in at_risk:
+            return f"{key[0]} {key[1]}"
+    return ""
+
 
 PROPOSAL_COLUMNS = [
     "job_id",
@@ -112,14 +122,12 @@ def propose_remediation(
     verified_shot = ""
     note = ""
     if shot_at_risk.strip():
-        parsed = _parse_shot(shot_at_risk)
-        if parsed is not None and parsed in _shots_currently_at_risk():
-            verified_shot = f"{parsed[0]} {parsed[1]}"
-        else:
+        verified_shot = _verify_shot(shot_at_risk, _shots_currently_at_risk())
+        if not verified_shot:
             note = (
-                f"{shot_at_risk!r} is not currently projected to miss its review, "
-                "so this proposal is recorded as protecting no delivery. Say so "
-                "rather than claiming it saves a shot."
+                f"No shot in {shot_at_risk!r} is currently projected to miss its "
+                "review, so this proposal is recorded as protecting no delivery. "
+                "Say so rather than claiming it saves a shot."
             )
     client = get_client()
     try:
