@@ -11,6 +11,7 @@ integration, and it would read this table.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from cinetrace.clickhouse.client import get_client
@@ -29,6 +30,35 @@ ALLOWED_ACTIONS = frozenset(
 )
 
 DECISIONS = frozenset({"approved", "rejected"})
+
+# One run files several proposals in a row and each would otherwise re-run the
+# delivery projection. The board only moves on a ticker beat, so a few seconds
+# of reuse costs nothing and saves a round trip per proposal.
+_AT_RISK_TTL_S = 30.0
+_at_risk_cache: tuple[float, frozenset[tuple[str, str]]] | None = None
+
+
+def _shots_currently_at_risk() -> frozenset[tuple[str, str]]:
+    global _at_risk_cache
+    now = time.monotonic()
+    if _at_risk_cache and now - _at_risk_cache[0] < _AT_RISK_TTL_S:
+        return _at_risk_cache[1]
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    shots = frozenset(
+        (str(row["show"]), str(row["shot"]))
+        for row in fetch_shots_at_risk()["rows"]
+        if row.get("at_risk")
+    )
+    _at_risk_cache = (now, shots)
+    return shots
+
+
+def _parse_shot(value: str) -> tuple[str, str] | None:
+    parts = value.replace("/", " ").split()
+    if len(parts) != 2:
+        return None
+    return parts[0].upper(), parts[1].lower()
 
 PROPOSAL_COLUMNS = [
     "job_id",
@@ -61,16 +91,41 @@ def propose_remediation(
             kill_zombie, release_idle_queue, flag_overrun.
         reason: One sentence of evidence, including the measured number that
             justifies acting.
-        shot_at_risk: The show/shot this protects, or an empty string if the
-            job is not blocking a delivery.
+        shot_at_risk: The show/shot this protects, as "SHOW shotid", or an
+            empty string if the job is not blocking a delivery. Recorded only if
+            that shot is currently projected to miss its review; a shot that
+            still makes its deadline is not protected by anything, and the
+            response will tell you when the claim was dropped.
     """
     if action not in ALLOWED_ACTIONS:
         raise ValueError(f"Unknown action {action!r}. Allowed: {sorted(ALLOWED_ACTIONS)}")
+    # "Protects a review" is the strongest claim this product makes, so it is
+    # the one claim a model does not get to assert unchecked. A shot with a
+    # review in an hour that is still projected to make it is not protected by
+    # anything, and recording it as such would put a false linkage in the audit
+    # table the whole page rests on.
+    #
+    # Dropped rather than raised: ADK propagates a tool exception instead of
+    # returning it to the model, so refusing here would abort the run over a
+    # detail the proposal does not depend on. The note goes back in the tool
+    # response, which the model does see, so its narration can follow.
+    verified_shot = ""
+    note = ""
+    if shot_at_risk.strip():
+        parsed = _parse_shot(shot_at_risk)
+        if parsed is not None and parsed in _shots_currently_at_risk():
+            verified_shot = f"{parsed[0]} {parsed[1]}"
+        else:
+            note = (
+                f"{shot_at_risk!r} is not currently projected to miss its review, "
+                "so this proposal is recorded as protecting no delivery. Say so "
+                "rather than claiming it saves a shot."
+            )
     client = get_client()
     try:
         client.insert(
             "remediation_proposals",
-            [[job_id, action, reason, shot_at_risk, "action_agent", "dry_run", "proposed", "", 0]],
+            [[job_id, action, reason, verified_shot, "action_agent", "dry_run", "proposed", "", 0]],
             column_names=PROPOSAL_COLUMNS,
         )
     finally:
@@ -79,7 +134,8 @@ def propose_remediation(
         "job_id": job_id,
         "action": action,
         "reason": reason,
-        "shot_at_risk": shot_at_risk,
+        "shot_at_risk": verified_shot,
+        "shot_at_risk_note": note,
         "executed": False,
         "mode": "dry_run",
         "status": "proposed",

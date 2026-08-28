@@ -56,9 +56,91 @@ def test_unknown_decision_is_refused() -> None:
 
 
 @needs_clickhouse
+def test_a_shot_that_still_makes_its_review_cannot_be_claimed_as_protected() -> None:
+    """"Protects a review" is the strongest claim the product makes.
+
+    A model that names a shot with a soon deadline which is nonetheless still
+    on track has not found a protected delivery, and recording it would put a
+    false linkage in the table the whole page rests on. The proposal still
+    files -- the waste is real either way -- but the claim does not survive.
+    """
+    from cinetrace.clickhouse.proposals import propose_remediation
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    rows = fetch_shots_at_risk()["rows"]
+    safe = next((r for r in rows if not r.get("at_risk")), None)
+    if safe is None:
+        pytest.skip("every tracked shot is at risk right now")
+
+    job_id = f"job-test-{uuid.uuid4().hex[:8]}"
+    try:
+        result = propose_remediation(
+            job_id, "kill_zombie", "because", f"{safe['show']} {safe['shot']}"
+        )
+        assert result["persisted"], "the waste is real even when the shot claim is not"
+        assert result["shot_at_risk"] == ""
+        assert "not currently projected to miss" in result["shot_at_risk_note"]
+
+        client = get_client()
+        try:
+            filed = client.query(
+                "SELECT shot_at_risk FROM proposal_state WHERE job_id = {jid:String}",
+                parameters={"jid": job_id},
+            ).result_rows
+            assert filed == [("",)], "an unverified shot must not reach the table"
+        finally:
+            client.close()
+    finally:
+        _cleanup(job_id)
+
+
+@needs_clickhouse
+def test_a_shot_the_board_does_not_know_is_dropped() -> None:
+    from cinetrace.clickhouse.proposals import propose_remediation
+
+    job_id = f"job-test-{uuid.uuid4().hex[:8]}"
+    try:
+        result = propose_remediation(job_id, "kill_zombie", "because", "the NEBULA one")
+        assert result["shot_at_risk"] == ""
+        assert result["shot_at_risk_note"]
+    finally:
+        _cleanup(job_id)
+
+
+@needs_clickhouse
+def test_a_genuinely_at_risk_shot_is_accepted() -> None:
+    from cinetrace.clickhouse.proposals import propose_remediation
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    rows = fetch_shots_at_risk()["rows"]
+    risky = next((r for r in rows if r.get("at_risk")), None)
+    if risky is None:
+        pytest.skip("nothing is at risk right now")
+
+    job_id = f"job-test-{uuid.uuid4().hex[:8]}"
+    try:
+        result = propose_remediation(
+            job_id, "kill_zombie", "because", f"{risky['show']} {risky['shot']}"
+        )
+        assert result["persisted"]
+        assert result["shot_at_risk"] == f"{risky['show']} {risky['shot']}"
+    finally:
+        _cleanup(job_id)
+
+
+@needs_clickhouse
 def test_proposal_is_pending_until_a_human_decides() -> None:
     """The full governance path: file, read as pending, approve, read as approved."""
     from cinetrace.clickhouse.proposals import decide_proposal, propose_remediation
+
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    # Cannot be a fixed literal: shot_at_risk is validated against the live
+    # delivery board, and a hardcoded shot stops being at risk as it ticks.
+    risky = next((r for r in fetch_shots_at_risk()["rows"] if r.get("at_risk")), None)
+    if risky is None:
+        pytest.skip("nothing is at risk right now")
+    shot = f"{risky['show']} {risky['shot']}"
 
     job_id = f"job-pytest-{uuid.uuid4().hex[:8]}"
     try:
@@ -66,7 +148,7 @@ def test_proposal_is_pending_until_a_human_decides() -> None:
             job_id,
             "kill_zombie",
             "pytest evidence: 71.5 GPU-hours with frames stuck at 23",
-            shot_at_risk="ORBIT sh0435",
+            shot_at_risk=shot,
         )
         assert proposed["executed"] is False
         assert proposed["mode"] == "dry_run"
@@ -79,7 +161,7 @@ def test_proposal_is_pending_until_a_human_decides() -> None:
                 "WHERE job_id = {jid:String}",
                 parameters={"jid": job_id},
             ).result_rows
-            assert filed == [("pending", "ORBIT sh0435", "action_agent", 0)]
+            assert filed == [("pending", shot, "action_agent", 0)]
 
             # Filing is not approval: the impact query must not see it yet.
             credited = client.query(

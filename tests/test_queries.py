@@ -123,6 +123,36 @@ def test_asof_finds_saturated_vram_before_an_oom_death() -> None:
     assert all(r["seconds_before_death"] >= 0 for r in rows)
 
 
+def test_live_job_ids_are_wide_enough_for_their_offset() -> None:
+    """leftPad truncates rather than passing a longer string through.
+
+    The live cohort is numbered from an offset of 900_000, so toString(n) is
+    already six characters. Padding it to five returned '90024' for 900240 and
+    collapsed 4,400 jobs onto 440 ids.
+    """
+    from cinetrace.clickhouse.generate import LIVE_SQL
+
+    assert "leftPad(toString(n), 6, '0')) AS job_id" in LIVE_SQL
+
+
+@needs_clickhouse
+def test_a_job_id_identifies_exactly_one_job() -> None:
+    """A proposal names a job_id. If two jobs share one, it is unexecutable and
+    every aggregate that joins on job_id double counts.
+    """
+    from cinetrace.clickhouse.client import get_client
+
+    client = get_client()
+    try:
+        rows = client.query(
+            "SELECT job_id, count() AS n FROM render_jobs "
+            "GROUP BY job_id HAVING n > 1 ORDER BY n DESC LIMIT 5"
+        ).result_rows
+    finally:
+        client.close()
+    assert not rows, f"job_id is not unique: {rows}"
+
+
 @needs_clickhouse
 def test_farm_is_at_studio_scale() -> None:
     from cinetrace.clickhouse.queries import fetch_farm_scale

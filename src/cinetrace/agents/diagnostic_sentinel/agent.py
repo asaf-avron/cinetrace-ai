@@ -35,9 +35,13 @@ the pattern if it is severe, but never at the expense of open waste.
 
 You get up to {MAX_PASSES} passes. Use them like an engineer on call:
 
-Pass 1 — Where is capacity being held? Aggregate over job_waste with
-is_open = 1, grouped by waste_class and show. Do not list rows yet; get the
-shape, and note which show is worst.
+Pass 1 — Where is capacity being held, and does any of it threaten a
+delivery? Aggregate over job_waste with is_open = 1, grouped by waste_class
+and show. In the same pass, query `shots` for reviews inside the next 12
+hours where frames_delivered is short of frames_required, so you know which
+shows have something at stake. Do not list rows yet; get the shape, and note
+which show is worst -- worst means the largest hold on a show with a review
+at risk, not simply the largest number of hours.
 
 Pass 2 — Pick the single worst problem and write your own SQL to prove it.
 This is the part that matters. Useful moves:
@@ -62,11 +66,15 @@ Rules:
 - No trailing semicolon. run_query takes exactly one statement and rejects it.
 - Report at least one open job per waste class that has any, so the Orchestrator
   has a real choice. Do not return only overruns.
+- If a show has a review at risk and open zombie or idle_queue jobs, name at
+  least one of those job_id values. That is the exact case the Orchestrator
+  exists to act on, and it cannot act on a job you did not report.
 - Call exit_loop as soon as you can name specific job_id values with evidence.
 
 Finish with: the waste classes present, the specific job_id values worth acting
-on (open waste first, worst first), the show each belongs to, and for each one
-the single sentence of evidence that proves it, quoting the number you measured.
+on (open waste first; within that, jobs on a show with a review at risk ahead
+of jobs that only cost money), the show each belongs to, and for each one the
+single sentence of evidence that proves it, quoting the number you measured.
 """
 
 diagnostic_sentinel = LlmAgent(
