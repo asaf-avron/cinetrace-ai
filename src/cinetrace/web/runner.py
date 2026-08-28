@@ -38,6 +38,37 @@ DEFAULT_PROMPT = (
     "the jobs whose slots would most protect an upcoming dailies review."
 )
 
+
+def build_prompt() -> str:
+    """Name the reviews at risk instead of trusting the Sentinel to go looking.
+
+    Told only to weigh delivery risk, it ranks by hours and reaches for the
+    biggest zombie, which is usually one of the fixed archetypes on a show with
+    nothing due. The Orchestrator then correctly reports that the plan protects
+    no review, and the product's headline claim never demonstrates itself even
+    though the farm is full of waste sitting on the show that is actually late.
+    Making the board an input rather than an errand is the difference between
+    that happening most runs and not at all.
+    """
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    try:
+        rows = fetch_shots_at_risk()["rows"]
+    except Exception:  # a broken board must not take the whole run with it
+        return DEFAULT_PROMPT
+
+    at_risk = [row for row in rows if row.get("at_risk")]
+    if not at_risk:
+        return f"{DEFAULT_PROMPT} No shot is currently projected to miss its review."
+
+    shows = ", ".join(sorted({str(row["show"]) for row in at_risk}))
+    shots = ", ".join(f"{row['show']} {row['shot']}" for row in at_risk[:8])
+    return (
+        f"{DEFAULT_PROMPT} Reviews at risk right now: {len(at_risk)} shots on "
+        f"{shows} ({shots}). Open waste on those shows outranks larger waste "
+        "anywhere else, so report at least one open job from them by job_id."
+    )
+
 AGENT_STEPS = {
     "diagnostic_sentinel": {
         "id": "sentinel",
@@ -300,7 +331,8 @@ async def stream_supervisor(message: str | None = None):
     from cinetrace.web.agent_engine import stream_agent_engine
 
     collector = RunCollector()
-    events, error = await stream_agent_engine(DEFAULT_PROMPT)
+    prompt = build_prompt()
+    events, error = await stream_agent_engine(prompt)
     if events:
         engine = "agent_engine"
         yield {"type": "engine", "engine": engine, "reason": ""}
@@ -314,7 +346,7 @@ async def stream_supervisor(message: str | None = None):
             "engine": engine,
             "reason": error or "",
         }
-        async for event in _iter_in_process(DEFAULT_PROMPT):
+        async for event in _iter_in_process(prompt):
             for frame in collector.add(event):
                 yield frame
 
