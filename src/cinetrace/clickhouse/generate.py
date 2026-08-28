@@ -173,7 +173,14 @@ WITH{_COMMON_WITH},
         greatest(eff_age_s - 120, 60)
     ) AS wall_s
 SELECT
-    concat('job-live-', leftPad(toString(n), 5, '0')) AS job_id,
+    -- Width 6, not 5. `n` here starts at offset 900_000, so toString(n) is
+    -- already six characters, and ClickHouse's leftPad truncates a string that
+    -- is longer than the target rather than leaving it alone: leftPad('900240',
+    -- 5, '0') is '90024'. At width 5 the whole live cohort collapsed onto 440
+    -- ids, ten unrelated jobs each -- different show, shot, host and status,
+    -- one identifier. That makes a proposal unexecutable and double-counts any
+    -- aggregate that joins on job_id.
+    concat('job-live-', leftPad(toString(n), 6, '0')) AS job_id,
     live_show AS show,
     concat('sh', leftPad(toString(toInt32(h_frames % 400) + 100), 4, '0')) AS shot,
     renderer_name AS renderer,
