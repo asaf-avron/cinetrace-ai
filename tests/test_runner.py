@@ -1,13 +1,46 @@
 """Event folding: the runner has to read ADK objects and Agent Engine dicts alike."""
 
+import pytest
+
 from cinetrace.clickhouse.apply import _statements
+from cinetrace.clickhouse.client import credentials_ready
 from cinetrace.web.runner import (
+    DEFAULT_PROMPT,
     RunCollector,
     _job_ids_in,
     _step_for,
+    build_prompt,
     cost_usd,
     normalize_event,
 )
+
+needs_clickhouse = pytest.mark.skipif(
+    not credentials_ready(),
+    reason="CLICKHOUSE_HOST and CLICKHOUSE_PASSWORD are not set in .env",
+)
+
+
+@needs_clickhouse
+def test_prompt_names_the_reviews_at_risk() -> None:
+    """The Sentinel ranks by hours unless the deadline is put in front of it.
+
+    Left to find the board itself it reached for the biggest zombie, which sits
+    on a show with nothing due, and the run protected nothing.
+    """
+    from cinetrace.clickhouse.queries import fetch_shots_at_risk
+
+    prompt = build_prompt()
+    assert prompt.startswith(DEFAULT_PROMPT)
+
+    at_risk = [r for r in fetch_shots_at_risk()["rows"] if r.get("at_risk")]
+    if not at_risk:
+        assert "No shot is currently projected to miss" in prompt
+        return
+
+    for show in {str(r["show"]) for r in at_risk}:
+        assert show in prompt
+    assert f"{at_risk[0]['show']} {at_risk[0]['shot']}" in prompt
+    assert "outranks larger waste" in prompt
 
 
 def test_job_ids_extracted_from_agent_text() -> None:
