@@ -49,7 +49,7 @@ detect → decide → act pipeline:
 
 - The **Diagnostic Sentinel** is given the schema and a goal, not a list of
   queries. It composes its own SQL through the official `mcp-clickhouse` server
-  — 6 to 16 `run_query` calls per run, depending on how many passes it decides
+  — 5 to 16 `run_query` calls per run, depending on how many passes it decides
   to take — starting broad and drilling into whatever looks worst. When it finds
   an OOM failure it runs an `ASOF LEFT JOIN` against a quarter-billion telemetry
   samples to find the last reading before the job died, and reports things like

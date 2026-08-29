@@ -81,7 +81,8 @@ stage is still the model's.
 | **Studio Orchestrator** | Weighs the findings against the dailies schedule and picks 1–3 jobs whose slots most protect an upcoming review. |
 | **Action Agent** | Records dry-run remediations with the evidence and the shot they protect. Never touches a render host. |
 
-A typical run makes **14–16 MCP `run_query` calls**, all composed at runtime.
+A run makes **5 to 16 MCP `run_query` calls**, all composed at runtime, and the
+count moves with how many passes the Sentinel takes.
 None of that SQL is hardcoded in this repo — the page shows you exactly what the
 model wrote.
 
