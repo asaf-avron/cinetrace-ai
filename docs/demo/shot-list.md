@@ -11,7 +11,10 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
 1. Wake ClickHouse Cloud and confirm `/api/health` shows `clickhouse: true` and
    `live.ticks` increasing.
 2. `uv run python -m cinetrace.clickhouse.reset_proposals` so the Impact card
-   starts unrecovered and the Approve beat has somewhere to go.
+   starts unrecovered and the Approve beat has somewhere to go. Do this between
+   takes as well, not just once: proposals accumulate, and three rehearsal runs
+   leave the same job in the table two or three times over, each protecting a
+   different shot as the board moves.
 3. Load the page and click **Run supervisor**. The run now streams: a sticky
    run bar docks under the nav with Detect → Decide → Dry-run, the elapsed
    timer, and the live status. Each SQL statement appears as the Sentinel
