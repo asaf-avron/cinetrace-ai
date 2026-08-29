@@ -153,6 +153,74 @@ takes, and the call count moves with it.
 - A cold page — the first load after a redeploy shows empty panels
 - The `?nolive` debug parameter
 
+## Automated capture
+
+The beats above are written for a person with a screen recorder. The first cut
+was not made that way — the CIN CTO agent produced it with a scripted Playwright
+capture and a TTS narration track, and that harness was never committed. So if an
+agent is recording this again, the mechanics below replace the parts of the
+script that assume a hand on a mouse.
+
+Everything needed is already on the Oracle host: Playwright 1.59 for both node
+and python, ffmpeg 6.1, espeak-ng, and ClickHouse credentials in
+`/opt/cinetrace-ai/.env` so `reset_proposals` works. Work in a worktree off
+current `main`, on a feature branch, and open a PR — never push `main`. Land no
+code at all during the recording window: a push touching `src/**`, the Dockerfile
+or `pyproject.toml` redeploys, and the redeploy wipes the in-memory run evidence
+that half these beats are pointing at.
+
+**Set the viewport, ignore the chrome.** Headless Chromium, viewport 1600×900,
+`deviceScaleFactor: 2`, `colorScheme: "dark"`. The "no bookmarks bar, no
+extensions" half of step 4 is a no-op headless. The width is not: the layout has
+a breakpoint and a narrower viewport reflows the panels into a column.
+
+**The narration is generated, not read aloud off the screen.** Four beats tell
+you to read a live number rather than trust the script, which a pre-rendered TTS
+track cannot do. Resolve them before synthesis by reading the rendered text of
+the element itself, so the words and the frame cannot disagree:
+
+| Beat | Read the text of | Instead of saying |
+|---|---|---|
+| 0:00 hero | `#shots-at-risk`, `#shots-recoverable`, `#slots-stuck` | seven, five, forty-two |
+| 0:20 scale | `#scale-samples`, `#scale-jobs`, `#scale-hosts` | a quarter of a billion |
+| 1:05 root cause | `#asof-stats`, first row of `#asof-rows` | five seconds, two million rows |
+| 2:45 close | `#cost-meter`, `#impact-open` | four cents, six thousand dollars |
+
+**Scroll to anchors rather than panning.** The nav holds the canonical positions
+— `#top`, `#dailies`, `#impact-row`, `#agents`, `#root-cause`, `#recall`,
+`#sentinel-queries`, `#farm-hours`, `#proposals-section` — so
+`scrollIntoViewIfNeeded()` lands each beat where the sticky nav expects it.
+"Point at the live pill" is a `hover()` on `#live-pill`. For the recall beat,
+fill `#recall-input` and submit `#recall-form`; the field ships pre-filled with a
+conversational OOM phrase, so overwrite it only if you want the exact wording
+from the 1:30 beat.
+
+**Wait on the run instead of timing it.** Click `#run` once at the top of the
+capture. No credential is needed — `#token-row` is hidden because runs are
+public. Then wait for completion rather than assuming the 0:35 mark: subscribe to
+`/api/stream`, or poll `#run-status` until `#run-bar` hides. Runs land between 65
+and 101 seconds. Take one continuous capture and cut the beats in post; the
+timings under "The cut" are targets for the edit, not for the browser.
+
+**Approve the row that moves the number, not the first one.** Join
+`/api/proposals` to `/api/jobs` on `job_id`, keep the rows where `is_open` is
+true, take the highest `waste_usd`, and click
+`button.approve[data-job="<that job id>"]`. The credit is that one job's own
+waste, so this choice is the difference between the Impact card jumping by $104
+and by $15.
+
+**Budget the runs.** Five per rolling hour normally, raised for the recording
+window and put back afterwards; the overflow is a 429. Iterate the Playwright
+script against a page that has already run rather than spending a supervisor run
+on every attempt, and call `reset_proposals` between real takes.
+
+**Deliverables, and where they stop.** An MP4 plus a retimed
+`cinetrace-ai-demo.srt` if the narration drifts from the script. `docs/demo/*.mp4`
+is gitignored, so the HQ file stays at that path in the worktree and a compressed
+copy under ~1 MB goes to Paperclip as the issue artifact, the way CIN-7 handed
+off the first cut. **The Vimeo replace below is human-only** — there is no Vimeo
+credential on the host and there should not be one.
+
 ## Replacing the video on Vimeo
 
 Replace the file in place rather than uploading a new video. The URL, the embed
