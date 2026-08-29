@@ -211,16 +211,19 @@ freeing the slot.
 Devpost currently has **zero screenshots**. Upload these with the captions
 below; the thumbnail should be the first one.
 
+Devpost caps a caption at **140 characters**, so keep one claim per image and
+let the story section carry the detail.
+
 | File | Caption |
 | --- | --- |
-| `01-dailies-at-risk.png` | The headline is delivery, not cost: shots that will miss review, and how many come back if the stuck GPU slots are released. A quarter-billion telemetry rows behind it. |
-| `02-impact-and-waste.png` | Open waste is what an agent can still change. The full-history figure sizes the problem, annualised against the span actually measured. Approval, not detection, moves the number. |
-| `03-three-agents.png` | Detect → decide → dry-run as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator names the review each fix protects, and leaves it blank on the job that costs money but blocks no delivery. |
+| `01-dailies-at-risk.png` | Delivery, not cost: the shots that will miss review, and how many come back if the stuck GPU slots are freed. |
+| `02-impact-and-waste.png` | Open waste is what an agent can still change; the full-history figure sizes the problem. Approval, not detection, moves the number. |
+| `03-three-agents.png` | Detect → decide → dry-run as an ADK SequentialAgent, so no stage can be skipped. The Orchestrator names the review each fix protects. |
 | `04-mcp-evidence.png` | SQL the Sentinel composed itself, through the official mcp-clickhouse server. None of these statements exist in the repo. |
-| `05-root-cause-asof.png` | ASOF LEFT JOIN: the last telemetry sample before each OOM death. Bounds and a (host, ts) projection keep it to 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
+| `05-root-cause-asof.png` | ASOF LEFT JOIN: the last sample before each OOM death, 2.2M rows out of a quarter-billion. VRAM at 97% is the smoking gun. |
 | `06-semantic-recall.png` | Vertex AI embeddings, cosineDistance in ClickHouse. Describe a failure in plain language and the archive returns the fix that worked. |
-| `07-detection-sql.png` | Every panel shows its own SQL and what the query cost. The badge is the real match count, not the LIMIT. Thresholds are per-cohort tDigest fences, not constants. |
-| `08-proposals-approval.png` | Dry-run and append-only. Nothing reaches a render host until a human approves it, and only then does the saving count. The PROTECTS column is checked against the live delivery board, so a shot appears there only if it really is about to miss its review. |
+| `07-detection-sql.png` | Every panel shows its own SQL, what it cost, and the true match count. Thresholds are per-cohort tDigest fences, not constants. |
+| `08-proposals-approval.png` | Dry-run and append-only: nothing reaches a render host until a human approves. PROTECTS is verified against the live delivery board. |
 | `09-full-page.png` | The whole supervisor. |
 
 ## Built With
