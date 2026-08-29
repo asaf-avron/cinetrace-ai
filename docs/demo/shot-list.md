@@ -195,6 +195,14 @@ fill `#recall-input` and submit `#recall-form`; the field ships pre-filled with 
 conversational OOM phrase, so overwrite it only if you want the exact wording
 from the 1:30 beat.
 
+**`networkidle` never fires on this page.** It holds an open `EventSource` on
+`/api/stream` for the live ticker, so `wait_until="networkidle"` times out every
+single time. Navigate with `wait_until="load"` and gate on a selector instead —
+`#shots-at-risk` is a good first one. Two beats also depend on a completed run
+rather than merely a loaded page: `#cost-meter` is blank until then, and
+`button.approve` does not exist at all until a run has filed proposals. Capture
+2:20 and 2:45 after the run finishes, not before.
+
 **Wait on the run instead of timing it.** Click `#run` once at the top of the
 capture. No credential is needed — `#token-row` is hidden because runs are
 public. Then wait for completion rather than assuming the 0:35 mark: subscribe to
