@@ -26,11 +26,13 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
    **Do not roll while `#shots-recoverable` is 0.** The ticker swings
    (10/6, then 8/4, then 2/0). A hero that opens on a green zero under
    "recoverable by freeing stuck slots" argues against the product: the
-   pitch is that freeing slots saves reviews. Poll `/api/shots` (or the
-   live DOM) until `recoverable_count` is greater than zero — a wait of
-   minutes is enough — and keep reading the live number. Do not hardcode
-   a count. `scripts/demo/record_demo.py` refuses to capture until that
-   gate passes.
+   pitch is that freeing slots saves reviews. Read `/api/shots` (or the
+   live DOM) once; keep the live number and do not hardcode a count.
+   `scripts/demo/record_demo.py` refuses the take if the gate is closed.
+   Do not sit in a multi-hour poll — NEBULA's session is hours, not
+   minutes, and a 0/0 board after a roll is a designed trough. The
+   board owns `--refresh-live` (never `--jobs-only`, never truncate
+   `frame_samples`). After a re-seed, verify after a full ticker tick.
 
 **Land your code before you roll.** The agent timeline and the MCP list are held
 in memory on the instance, not in ClickHouse, so any deploy wipes them and the
@@ -184,12 +186,13 @@ that half these beats are pointing at.
 extensions" half of step 4 is a no-op headless. The width is not: the layout has
 a breakpoint and a narrower viewport reflows the panels into a column.
 
-**Refuse a 0-recoverable hero.** Poll `/api/shots` until
-`recoverable_count > 0` *before* opening the recorder. Then confirm the
-DOM (`#shots-recoverable`) is still greater than zero after load. If the
-ticker flipped to zero between the API wait and the first frame, abort
-the take and wait again. `build_beats` still reads the live count; the
-gate is what stops the degenerate 2/0 opening.
+**Refuse a 0-recoverable hero.** Confirm `/api/shots` `recoverable_count > 0`
+once *before* opening the recorder, then confirm the DOM
+(`#shots-recoverable`) is still greater than zero after load. If the
+ticker flipped to zero between the API check and the first frame, abort
+the take. Do not idle in a poll loop — post and stop; the board decides
+whether to `--refresh-live`. `build_beats` still reads the live count;
+the gate is what stops the degenerate 2/0 opening.
 
 **Captions come from speech, not even slices.** Synthesize each sentence
 (or clause) separately. Prefer edge-tts `--write-subtitles` for the

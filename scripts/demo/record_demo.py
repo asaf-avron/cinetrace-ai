@@ -628,8 +628,8 @@ def main() -> int:
     parser.add_argument(
         "--gate-timeout",
         type=float,
-        default=900.0,
-        help="Seconds to wait for #shots-recoverable > 0 before refusing the take",
+        default=20.0,
+        help="Seconds to confirm #shots-recoverable > 0, then refuse (do not idle)",
     )
     args = parser.parse_args()
 
