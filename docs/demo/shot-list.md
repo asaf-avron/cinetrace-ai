@@ -15,10 +15,17 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
 3. Load the page and click **Run supervisor**. The run now streams: a sticky
    run bar docks under the nav with Detect → Decide → Dry-run, the elapsed
    timer, and the live status. Each SQL statement appears as the Sentinel
-   writes it. Hold on the bar and the MCP list. After it finishes the bar
-   hides; reload once so `/api/last-run` keeps the evidence on screen.
+   writes it. Hold on the bar and the MCP list. Allow 90 to 100 seconds. After
+   it finishes the bar hides; reload once so `/api/last-run` keeps the evidence
+   on screen.
 4. Browser at 1600px wide, dark OS theme, no bookmarks bar, no extensions.
 5. Check "Dailies at risk" shows a handful, not zero and not forty.
+
+**Do this run last.** The agent timeline and the MCP list are held in memory on
+the instance, not in ClickHouse, so any deploy wipes them and the evidence
+panels go blank until someone runs the supervisor again. A push touching
+`src/**`, the Dockerfile or `pyproject.toml` redeploys; docs-only pushes do not.
+Land your code first, then run, then record.
 
 ## The cut
 
@@ -106,9 +113,9 @@ Click **Approve** on a proposal. Cut to the Impact card moving.
 
 **2:45–3:00 — Close**
 
-Back to the top. Cost meter visible. Read the cents off the meter — a run lands
-near four cents at seventeen model calls, but it moves with how many passes the
-Sentinel takes.
+Back to the top. Cost meter visible. Read the cents off the meter. Observed runs
+land between two and four cents; it moves with how many passes the Sentinel
+takes, and the call count moves with it.
 
 > "Gemini, Google Cloud ADK, ClickHouse through MCP. This run cost about four
 > cents and found six thousand dollars of capacity that's burning right now —
