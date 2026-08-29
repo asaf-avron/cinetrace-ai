@@ -491,7 +491,7 @@ WHERE current_review_at > now('UTC') + toIntervalHour(due_hours)
 # A rebuilt live cohort has no telemetry of its own, and without it the ASOF
 # root-cause join falls back to whatever older sample happens to sit on the same
 # host -- which reads as "died 52 minutes after the host hit 97% VRAM" instead of
-# 20 seconds, and the VRAM figure belongs to a different job.
+# a few seconds, and the VRAM figure belongs to a different job.
 #
 # Backfilling every refreshed job would add ~176k rows every 15 minutes, so this
 # covers only the jobs the evidence panels actually read: OOM failures and

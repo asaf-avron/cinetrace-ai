@@ -26,11 +26,11 @@ This is not a fixture. The demo runs against a synthetic but studio-scale farm:
 
 | | |
 | --- | --- |
-| `frame_samples` | **240M rows** — one telemetry sample per job every 12s of wall time, capped by a 100-day TTL at roughly a quarter-billion |
+| `frame_samples` | **244M rows** — one telemetry sample per job every 12s of wall time, capped by a 100-day TTL at roughly a quarter-billion |
 | `render_jobs` | **198k jobs** across three months, 6 shows, 240 render hosts |
-| `farm_minute` | **850k rows** — incremental rollup kept current by a materialized view |
+| `farm_minute` | **900k rows** — incremental rollup kept current by a materialized view |
 | `error_embeddings` | 494 past incidents with Vertex AI embeddings |
-| On disk | 3.7 GB |
+| On disk | 3.9 GB |
 
 The live ticker keeps writing, so these grow a little every day.
 
@@ -91,12 +91,13 @@ The honest test for a partner track is whether the project would survive being
 ported to Postgres. This one would not:
 
 - **`ASOF LEFT JOIN`** pairs each OOM failure with the nearest telemetry sample
-  recorded *before* it died: *"job-live-90003 died 20 seconds after rnd-f16 hit
-  97% VRAM."* Bounds and a `(host, ts)` projection keep it to 2.2M rows out of a
-  quarter-billion. No other engine expresses "the row just before this moment"
-  in a single join.
+  recorded *before* it died: *"job-live-900409 died 4 seconds after rnd-e20 hit
+  97% VRAM."* Bounds and a `(host, ts)` projection keep it to about 2M rows out
+  of a quarter-billion. Almost nothing else expresses "the row just before this
+  moment" in a single join; everywhere else it is a window function or a
+  correlated subquery.
 - **Materialized view into `AggregatingMergeTree`** keeps a per-minute rollup
-  current on insert, so the dashboard reads 850k pre-aggregated rows instead of
+  current on insert, so the dashboard reads 900k pre-aggregated rows instead of
   a quarter-billion raw ones.
 - **`quantileTDigest` cohort baselines** replaced the old `cpu_hours >= 100`
   rule. An arnold CPU job legitimately burns 10x the hours of a redshift GPU job

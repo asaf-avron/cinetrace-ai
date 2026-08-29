@@ -26,8 +26,12 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
 
 Open on the hero. Read the headline off the screen — the count climbs as a
 review approaches, so use whatever is live at record time. At time of writing:
-three shots will miss their review, all three recoverable, forty-two GPU slots
-held by zombie and idle-queue jobs.
+seven shots will miss their review, five of them recoverable by freeing slots,
+forty-two GPU slots held by zombie and idle-queue jobs.
+
+Say "recoverable" only of the second number. Some shots are too far behind for
+freed capacity to save them, and the panel says so per shot — claiming all of
+them are recoverable is the one thing on this screen a judge can disprove.
 
 > "A render farm is the most expensive machine in a studio, and nobody watches
 > it in real time. When a job hangs overnight on eight GPUs, the cost isn't the
@@ -52,18 +56,27 @@ the nav and the SQL list are the shot — do not cut away to a spinner.
 
 **1:05–1:30 — Root cause. The best thirty seconds.**
 
-Scroll to Root cause. Land on the 97% VRAM row. Open the SQL drawer.
+Scroll to Root cause. The top row is `job-fail-oom`, NEBULA sh0040 on rnd-b04 at
+97% VRAM — it sorts first reliably, so you can rehearse against it. Open the SQL
+drawer. Read the gap off the screen rather than the script: the sample grid moves
+when the farm is regenerated, so it lands somewhere in the low seconds.
 
 > "When it finds an out-of-memory failure it runs an ASOF join — the last
-> telemetry sample before the job died. This one died twenty seconds after the
-> host hit 97% VRAM. Two point two million rows touched out of a quarter of a
-> billion, and the panel tells you exactly what it cost. You cannot ask a
-> database 'the row just before this moment' in one join anywhere else."
+> telemetry sample before the job died. This one died five seconds after the host
+> hit 97% VRAM. Two million rows touched out of a quarter of a billion, and the
+> panel tells you exactly what it cost. Almost nothing else lets you ask a
+> database for the row just before a moment in a single join — anywhere else
+> that's a window function or a correlated subquery."
 
 **1:30–1:50 — Institutional memory**
 
 Scroll to the recall panel. Type something conversational that shares no
-keywords with the archive, e.g. *"the card filled up and the job stopped"*.
+keywords with the archive: **"we ran out of graphics memory halfway through"**.
+It returns three OOM tickets against stored text reading "Allocation of 61523
+MiB failed", which is the point — not one word in common.
+
+Do not use "the card filled up and the job stopped". It now ranks an Arnold
+licence ticket first, and the voiceover is about memory.
 
 > "Error text is embedded with Vertex AI and searched by cosine distance in
 > ClickHouse. It matches meaning, not keywords — so it finds the ticket from
@@ -71,11 +84,17 @@ keywords with the archive, e.g. *"the card filled up and the job stopped"*.
 
 **1:50–2:20 — The decision, tied to a deadline**
 
-Back to the Orchestrator step in the timeline, then down to Proposals.
+Back to the Orchestrator step in the timeline, then down to Proposals. A blank
+PROTECTS cell is not a gap — it means that job was not blocking a delivery, and
+the claim was dropped rather than invented. Say so if one is on screen; it is a
+better beat than a full column.
 
 > "The Orchestrator weighs findings against the dailies schedule. A zombie on a
-> show with a review in five hours beats a bigger overrun due tomorrow. Every
-> proposal names the shot it protects."
+> show with a review in five hours beats a bigger overrun due tomorrow. And when
+> a proposal claims it protects a shot, that claim is checked against the
+> delivery board before the row is written — a shot that's actually on track
+> gets the claim dropped, not recorded. The agent doesn't get to mark its own
+> homework."
 
 **2:20–2:45 — Approval is the product**
 
@@ -87,9 +106,11 @@ Click **Approve** on a proposal. Cut to the Impact card moving.
 
 **2:45–3:00 — Close**
 
-Back to the top. Cost meter visible.
+Back to the top. Cost meter visible. Read the cents off the meter — a run lands
+near four cents at seventeen model calls, but it moves with how many passes the
+Sentinel takes.
 
-> "Gemini, Google Cloud ADK, ClickHouse through MCP. This run cost about seven
+> "Gemini, Google Cloud ADK, ClickHouse through MCP. This run cost about four
 > cents and found six thousand dollars of capacity that's burning right now —
 > and the reviews it was about to cost."
 
@@ -100,7 +121,27 @@ Back to the top. Cost meter visible.
 - A cold page — the first load after a redeploy shows empty panels
 - The `?nolive` debug parameter
 
+## Replacing the video on Vimeo
+
+Replace the file in place rather than uploading a new video. The URL, the embed
+code and the view count all survive, so **Devpost needs no edit at all** — the
+id stays `1220287055`.
+
+1. Open the video in your Vimeo library.
+2. Hit **Replace** next to the Share button, or Settings → **Video file** →
+   *Replace this video*. In the newer UI it is the version-history dropdown →
+   **+ New version**.
+3. Upload the new cut. The old one moves into version history, so you can
+   restore it if the recut turns out worse.
+
+Two things do not carry over:
+
+- **Captions.** The old track stays attached and will be mistimed against the
+  new cut. Delete it and upload `cinetrace-ai-demo.srt` fresh.
+- **The thumbnail.** Reselect a frame, or you will ship a poster frame from the
+  old cut.
+
 ## Accessibility
 
-Upload English subtitles. The existing `.srt` in this folder is for the previous
-cut and must be replaced, not reused.
+Upload English subtitles. `cinetrace-ai-demo.srt` in this folder is written
+against the voiceover above; if you ad-lib away from the script, retime it.

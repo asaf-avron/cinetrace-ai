@@ -1,28 +1,151 @@
 1
-00:00:00,020 --> 00:00:18,550
-CineTrace AI is a VFX studio supervisor that kills render-farm compute waste.
+00:00:00,500 --> 00:00:05,000
+A render farm is the most expensive
+machine in a studio.
 
 2
-00:00:18,600 --> 00:00:53,260
-Hosted supervisor on Cloud Run. Render jobs are live ClickHouse Cloud data — eight seed jobs, not mocks.
+00:00:05,000 --> 00:00:09,500
+And nobody watches it in real time.
 
 3
-00:00:53,310 --> 00:01:17,150
-Diagnostic Sentinel calls ClickHouse through MCP run_query with exact SQL: failed, retry loops, idle queue, zombies, overruns.
+00:00:09,500 --> 00:00:15,000
+When a job hangs overnight on eight GPUs,
+the cost isn't the compute.
 
 4
-00:01:17,200 --> 00:01:33,980
-Studio Orchestrator ranks waste. Action Agent writes dry-run remediation proposals into ClickHouse.
+00:00:15,000 --> 00:00:20,000
+It's the three shots that miss
+the 9am review.
 
 5
-00:01:34,030 --> 00:02:06,710
-Run supervisor — Sentinel queries, Orchestrator decides, Action Agent persists dry-run rows.
+00:00:20,500 --> 00:00:27,000
+This is a quarter of a billion rows of
+frame-level telemetry in ClickHouse.
 
 6
-00:02:06,760 --> 00:02:22,950
-Last run is the agent transcript. Proposals stay dry-run. Executed is no.
+00:00:27,000 --> 00:00:34,500
+198,000 jobs, 240 hosts — and it's still
+being written to while we watch.
 
 7
-00:02:23,000 --> 00:02:31,070
-Three agents. Real ClickHouse via MCP. Gemini on Vertex Agent Engine.
+00:00:35,500 --> 00:00:41,000
+Three Gemini agents on Google Cloud ADK.
 
+8
+00:00:41,000 --> 00:00:48,000
+The Sentinel isn't given queries. It's
+given the schema and a goal.
+
+9
+00:00:48,000 --> 00:00:56,000
+It writes its own SQL through the
+official ClickHouse MCP server.
+
+10
+00:00:56,000 --> 00:01:01,500
+You're watching it compose those against
+a quarter of a billion rows, live.
+
+11
+00:01:01,500 --> 00:01:05,000
+None of these statements are in our repo.
+
+12
+00:01:05,500 --> 00:01:11,000
+When it finds an out-of-memory failure,
+it runs an ASOF join.
+
+13
+00:01:11,000 --> 00:01:16,000
+The last telemetry sample
+before the job died.
+
+14
+00:01:16,000 --> 00:01:21,000
+This one died five seconds after
+the host hit 97% VRAM.
+
+15
+00:01:21,000 --> 00:01:25,500
+Two million rows touched out of
+a quarter of a billion.
+
+16
+00:01:25,500 --> 00:01:30,000
+Anywhere else, that's a window function
+or a correlated subquery.
+
+17
+00:01:30,500 --> 00:01:37,000
+Error text is embedded with Vertex AI and
+searched by cosine distance in ClickHouse.
+
+18
+00:01:37,000 --> 00:01:43,000
+It matches meaning, not keywords.
+
+19
+00:01:43,000 --> 00:01:50,000
+So it finds the ticket from March
+and the fix that closed it.
+
+20
+00:01:50,500 --> 00:01:56,000
+The Orchestrator weighs findings
+against the dailies schedule.
+
+21
+00:01:56,000 --> 00:02:03,000
+A zombie on a show with a review in five
+hours beats a bigger overrun due tomorrow.
+
+22
+00:02:03,000 --> 00:02:10,000
+When a proposal claims it protects a shot,
+that claim is checked before it's written.
+
+23
+00:02:10,000 --> 00:02:15,500
+A shot that's actually on track gets
+the claim dropped, not recorded.
+
+24
+00:02:15,500 --> 00:02:20,000
+The agent doesn't get to mark
+its own homework.
+
+25
+00:02:20,500 --> 00:02:25,000
+Nothing has touched a render host.
+
+26
+00:02:25,000 --> 00:02:32,000
+A proposal is a record, and the number
+only moves when a human approves it.
+
+27
+00:02:32,000 --> 00:02:38,500
+An agent finding waste
+doesn't reduce your bill.
+
+28
+00:02:38,500 --> 00:02:45,000
+A supervisor approving the fix does.
+
+29
+00:02:45,500 --> 00:02:50,000
+Gemini, Google Cloud ADK,
+ClickHouse through MCP.
+
+30
+00:02:50,000 --> 00:02:54,000
+This run cost about four cents
+
+31
+00:02:54,000 --> 00:02:57,500
+and found six thousand dollars
+of capacity burning right now.
+
+32
+00:02:57,500 --> 00:03:00,500
+And the reviews it was about to cost.
