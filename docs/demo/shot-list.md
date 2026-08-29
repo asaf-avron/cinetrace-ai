@@ -157,7 +157,9 @@ takes, and the call count moves with it.
 
 The beats above are written for a person with a screen recorder. The first cut
 was not made that way — the CIN CTO agent produced it with a scripted Playwright
-capture and a TTS narration track, and that harness was never committed. So if an
+capture and a TTS narration track. The harness now lives at
+`scripts/demo/record_demo.py` (system Python + Playwright; reset proposals with
+the worktree `.venv`). So if an
 agent is recording this again, the mechanics below replace the parts of the
 script that assume a hand on a mouse.
 
