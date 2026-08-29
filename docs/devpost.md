@@ -189,7 +189,7 @@ in their own class — including that a completed overrun is real money but stay
 out of the actionable total, since no action reclaims hours already spent.
 
 And the supervisor reports its own cost. A tool that kills compute waste should
-be able to say what it spends: three to four cents of Gemini per run.
+be able to say what it spends: two to four cents of Gemini per run.
 
 ## What we learned
 
