@@ -90,6 +90,87 @@ def test_live_numbers_replace_stale_script() -> None:
     assert "six thousand" in beats[-1].text
 
 
+def test_zero_recoverable_is_not_recordable() -> None:
+    live = {
+        "shots_at_risk": "2",
+        "shots_recoverable": "0",
+        "slots_stuck": "42",
+    }
+    assert n.parse_count("0") == 0
+    assert n.parse_count("—") == 0
+    assert n.hero_is_recordable(live) is False
+    with pytest.raises(n.HeroNotRecordable, match="shots-recoverable is 0"):
+        n.require_recordable_hero(live)
+
+
+def test_nonzero_recoverable_is_recordable() -> None:
+    assert n.hero_is_recordable({"shots_recoverable": "4", "shots_at_risk": "8"}) is True
+    n.require_recordable_hero({"shots_recoverable": "1", "shots_at_risk": "3"})
+
+
+def test_srt_follows_measured_sentence_durations_not_even_slices() -> None:
+    beat = n.Beat(
+        "hero",
+        "The problem",
+        "Short opener. A much longer second sentence that must not share the first cue's width.",
+        20,
+    )
+    srt = n.beats_to_srt([beat], [0.0], sentence_durations=[[3.2, 7.1]])
+    assert "00:00:00,000 --> 00:00:03,200" in srt
+    assert "00:00:03,200 --> 00:00:10,300" in srt
+    assert "Short opener." in srt
+    # Even-slice of the 20s target would have been 10.000 + 10.000.
+    assert "00:00:10,000" not in srt
+
+
+def test_srt_uses_edge_tts_spoken_cues() -> None:
+    beat = n.Beat("scale", "scale", "This is two hundred million rows.", 15)
+    spoken = [[(0.10, 4.40, "This is two hundred million rows.")]]
+    srt = n.beats_to_srt([beat], [20.0], spoken_cues=spoken)
+    assert "00:00:20,100 --> 00:00:24,400" in srt
+    assert "two hundred million" in srt
+
+
+def test_dense_cue_is_split_to_readable_rate() -> None:
+    text = (
+        "And when a proposal claims it protects a shot, that claim is checked "
+        "against the delivery board before the row is written — a shot that's "
+        "actually on track gets the claim dropped, not recorded."
+    )
+    assert len(text) / 5.83 > 20
+    parts = n.split_dense_text(text, 5.83)
+    assert len(parts) >= 2
+    assert all(len(part) < len(text) for part in parts)
+    cues = n.cues_from_measured([text], [5.83], 0.0)
+    assert len(cues) >= 2
+    assert max(len(part) for _, _, part in cues) < len(text)
+    # Realistic TTS of the same line is ~15 chars/sec and stays one cue.
+    comfortable = n.split_dense_text(text, len(text) / 15.0)
+    assert comfortable == [text]
+
+
+def test_parse_srt_cues_reads_edge_tts_output() -> None:
+    raw = (
+        "1\n"
+        "00:00:00,100 --> 00:00:04,405\n"
+        "A render farm is the most expensive machine in a studio.\n"
+    )
+    cues = n.parse_srt_cues(raw)
+    assert cues == [
+        (0.1, 4.405, "A render farm is the most expensive machine in a studio.")
+    ]
+
+
+def test_speech_units_break_long_sentences() -> None:
+    units = n.speech_units(
+        "And when a proposal claims it protects a shot, that claim is checked "
+        "against the delivery board before the row is written — a shot that's "
+        "actually on track gets the claim dropped, not recorded."
+    )
+    assert len(units) >= 2
+    assert all(len(unit) <= n.MAX_CUE_CHARS or " " not in unit for unit in units)
+
+
 def test_srt_timestamps_are_contiguous() -> None:
     beats = n.build_beats(
         {
@@ -106,10 +187,15 @@ def test_srt_timestamps_are_contiguous() -> None:
         }
     )
     starts = [0.0]
-    for beat in beats[:-1]:
-        starts.append(starts[-1] + beat.target_s)
-    srt = n.beats_to_srt(beats, starts)
+    durs: list[list[float]] = []
+    for beat in beats:
+        units = n.speech_units(beat.text)
+        slice_durs = [max(len(unit) / 15.0, 0.8) for unit in units]
+        durs.append(slice_durs)
+        if beat is not beats[-1]:
+            starts.append(starts[-1] + sum(slice_durs))
+    srt = n.beats_to_srt(beats, starts, sentence_durations=durs)
     assert srt.startswith("1\n00:00:00,000 -->")
     assert "eight shots" in srt
     last_end = srt.strip().split(" --> ")[-1].split("\n", 1)[0]
-    assert last_end.startswith("00:03:00")
+    assert last_end.startswith("00:")

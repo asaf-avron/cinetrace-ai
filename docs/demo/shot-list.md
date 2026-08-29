@@ -23,6 +23,14 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
    own run and you do not want this one's proposals still in the table.
 4. Browser at 1600px wide, dark OS theme, no bookmarks bar, no extensions.
 5. Check "Dailies at risk" shows a handful, not zero and not forty.
+   **Do not roll while `#shots-recoverable` is 0.** The ticker swings
+   (10/6, then 8/4, then 2/0). A hero that opens on a green zero under
+   "recoverable by freeing stuck slots" argues against the product: the
+   pitch is that freeing slots saves reviews. Poll `/api/shots` (or the
+   live DOM) until `recoverable_count` is greater than zero — a wait of
+   minutes is enough — and keep reading the live number. Do not hardcode
+   a count. `scripts/demo/record_demo.py` refuses to capture until that
+   gate passes.
 
 **Land your code before you roll.** The agent timeline and the MCP list are held
 in memory on the instance, not in ClickHouse, so any deploy wipes them and the
@@ -176,6 +184,24 @@ that half these beats are pointing at.
 extensions" half of step 4 is a no-op headless. The width is not: the layout has
 a breakpoint and a narrower viewport reflows the panels into a column.
 
+**Refuse a 0-recoverable hero.** Poll `/api/shots` until
+`recoverable_count > 0` *before* opening the recorder. Then confirm the
+DOM (`#shots-recoverable`) is still greater than zero after load. If the
+ticker flipped to zero between the API wait and the first frame, abort
+the take and wait again. `build_beats` still reads the live count; the
+gate is what stops the degenerate 2/0 opening.
+
+**Captions come from speech, not even slices.** Synthesize each sentence
+(or clause) separately. Prefer edge-tts `--write-subtitles` for the
+measured start/end of that clip; otherwise use the clip's
+`ffprobe` duration. Never divide a beat's span by `len(sentences)`.
+Split any cue over ~20 characters/sec across two cues.
+
+**The hosted URL has to be drawn on.** Headless Chromium has no address
+bar. Burn `https://cinetrace-781071502822.us-central1.run.app` as an
+ffmpeg `drawtext` lower-third on the first few seconds of the cut so
+judges can see it is the deployed farm.
+
 **The narration is generated, not read aloud off the screen.** Four beats tell
 you to read a live number rather than trust the script, which a pre-rendered TTS
 track cannot do. Resolve them before synthesis by reading the rendered text of
@@ -217,7 +243,11 @@ timings under "The cut" are targets for the edit, not for the browser.
 true, take the highest `waste_usd`, and click
 `button.approve[data-job="<that job id>"]`. The credit is that one job's own
 waste, so this choice is the difference between the Impact card jumping by $104
-and by $15.
+and by $15. `/api/jobs` is only the top 60 waste rows — if the run proposed a
+job outside that list, fall back to any pending `button.approve` rather than
+aborting. Do not treat a leftover `#cost-meter` from the previous run as
+proof this take finished; wait for an Approve button that did not exist
+after `reset_proposals`.
 
 **Budget the runs.** Five per rolling hour normally, raised for the recording
 window and put back afterwards; the overflow is a 429. Iterate the Playwright

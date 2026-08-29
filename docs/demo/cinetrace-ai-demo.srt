@@ -1,95 +1,135 @@
 1
-00:00:00,000 --> 00:00:06,672
-A render farm is the most expensive machine in a studio, and nobody watches it in real time.
+00:00:00,100 --> 00:00:04,365
+A render farm is the most expensive machine in a studio,
 
 2
-00:00:06,672 --> 00:00:13,344
-When a job hangs overnight on eight GPUs, the cost isn't the compute.
+00:00:04,468 --> 00:00:07,470
+and nobody watches it in real time.
 
 3
-00:00:13,344 --> 00:00:20,016
-It's the two shots that miss the 9am review — zero recoverable by freeing slots, forty-two GPU slots held by zombie and idle-queue jobs.
+00:00:07,588 --> 00:00:12,669
+When a job hangs overnight on eight GPUs, the cost isn't the compute.
 
 4
-00:00:20,016 --> 00:00:26,328
-This is 243.8 million rows of frame-level telemetry in ClickHouse.
+00:00:12,772 --> 00:00:18,235
+It's the three shots that miss the 9am review — three recoverable by freeing slots,
 
 5
-00:00:26,328 --> 00:00:32,640
-198 thousand jobs, 240 hosts, and it's still being written to while we watch.
+00:00:18,340 --> 00:00:22,868
+forty-two GPU slots held by zombie and idle-queue jobs.
 
 6
-00:00:32,640 --> 00:00:37,758
-Three Gemini agents on Google Cloud ADK.
+00:00:22,972 --> 00:00:28,908
+This is 243.8 million rows of frame-level telemetry in ClickHouse.
 
 7
-00:00:37,758 --> 00:00:42,876
-The Sentinel isn't given queries — it's given the schema and a goal, and it writes its own SQL through the official ClickHouse MCP server.
+00:00:29,020 --> 00:00:35,601
+198 thousand jobs, 240 hosts, and it's still being written to while we watch.
 
 8
-00:00:42,876 --> 00:00:47,994
-You're watching it compose those against 243.8 million rows, live.
+00:00:35,716 --> 00:00:39,613
+Three Gemini agents on Google Cloud ADK.
 
 9
-00:00:47,994 --> 00:00:53,112
-None of them are in our repo.
+00:00:39,724 --> 00:00:44,384
+The Sentinel isn't given queries — it's given the schema and a goal,
 
 10
-00:00:53,112 --> 00:00:59,694
-When it finds an out-of-memory failure it runs an ASOF join — the last telemetry sample before the job died.
+00:00:44,500 --> 00:00:49,384
+and it writes its own SQL through the official ClickHouse MCP server.
 
 11
-00:00:59,694 --> 00:01:06,276
-This one died five seconds after the host hit 97% VRAM.
+00:00:49,492 --> 00:00:55,086
+You're watching it compose those against 243.8 million rows, live.
 
 12
-00:01:06,276 --> 00:01:12,858
-2.1 million rows touched, and the panel tells you exactly what it cost.
+00:00:55,204 --> 00:00:57,798
+None of them are in our repo.
 
 13
-00:01:12,858 --> 00:01:19,440
-Almost nothing else lets you ask a database for the row just before a moment in a single join — anywhere else that's a window function or a correlated subquery.
+00:00:57,916 --> 00:01:02,168
+When it finds an out-of-memory failure it runs an ASOF join
 
 14
-00:01:19,440 --> 00:01:25,296
-Error text is embedded with Vertex AI and searched by cosine distance in ClickHouse.
+00:01:02,284 --> 00:01:05,878
+the last telemetry sample before the job died.
 
 15
-00:01:25,296 --> 00:01:31,152
-It matches meaning, not keywords — so it finds the ticket from March and the fix that closed it.
+00:01:05,980 --> 00:01:11,153
+This one died five seconds after the host hit 97% VRAM.
 
 16
-00:01:31,152 --> 00:01:36,984
-The Orchestrator weighs findings against the dailies schedule.
+00:01:11,260 --> 00:01:16,591
+2.2 million rows touched, and the panel tells you exactly what it cost.
 
 17
-00:01:36,984 --> 00:01:42,816
-A zombie on a show with a review in five hours beats a bigger overrun due tomorrow.
+00:01:16,708 --> 00:01:22,381
+Almost nothing else lets you ask a database for the row just before a moment in a single join
 
 18
-00:01:42,816 --> 00:01:48,648
-And when a proposal claims it protects a shot, that claim is checked against the delivery board before the row is written — a shot that's actually on track gets the claim dropped, not recorded.
+00:01:22,492 --> 00:01:26,981
+anywhere else that's a window function or a correlated subquery.
 
 19
-00:01:48,648 --> 00:01:54,480
-The agent doesn't get to mark its own homework.
+00:01:27,100 --> 00:01:32,892
+Error text is embedded with Vertex AI and searched by cosine distance in ClickHouse.
 
 20
-00:01:54,480 --> 00:01:59,112
-Nothing has touched a render host.
+00:01:33,004 --> 00:01:36,046
+It matches meaning, not keywords
 
 21
-00:01:59,112 --> 00:02:03,744
-A proposal is a record, and the number only moves when a human approves it — because an agent finding waste doesn't reduce your bill.
+00:01:36,148 --> 00:01:40,190
+so it finds the ticket from March and the fix that closed it.
 
 22
-00:02:03,744 --> 00:02:08,376
-A supervisor approving the fix does.
+00:01:40,300 --> 00:01:44,434
+The Orchestrator weighs findings against the dailies schedule.
 
 23
-00:02:08,376 --> 00:02:15,876
-Gemini, Google Cloud ADK, ClickHouse through MCP.
+00:01:44,548 --> 00:01:49,919
+A zombie on a show with a review in five hours beats a bigger overrun due tomorrow.
 
 24
-00:02:15,876 --> 00:02:23,376
-This run cost about two cents and found five thousand seven hundred forty-five dollars of capacity that's burning right now — and the reviews it was about to cost.
+00:01:50,020 --> 00:01:53,575
+And when a proposal claims it protects a shot,
+
+25
+00:01:53,692 --> 00:01:58,155
+that claim is checked against the delivery board before the row is written
+
+26
+00:01:58,276 --> 00:02:02,844
+a shot that's actually on track gets the claim dropped, not recorded.
+
+27
+00:02:02,956 --> 00:02:06,537
+The agent doesn't get to mark its own homework.
+
+28
+00:02:06,652 --> 00:02:09,575
+Nothing has touched a render host.
+
+29
+00:02:09,676 --> 00:02:14,783
+A proposal is a record, and the number only moves when a human approves it
+
+30
+00:02:14,884 --> 00:02:18,741
+because an agent finding waste doesn't reduce your bill.
+
+31
+00:02:18,844 --> 00:02:22,044
+A supervisor approving the fix does.
+
+32
+00:02:22,156 --> 00:02:26,921
+Gemini, Google Cloud ADK, ClickHouse through MCP.
+
+33
+00:02:27,028 --> 00:02:34,478
+This run cost about seven cents and found five thousand nine hundred seventy-three dollars of capacity that's burning right now
+
+34
+00:02:34,588 --> 00:02:37,682
+and the reviews it was about to cost.

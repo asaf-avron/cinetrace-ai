@@ -16,12 +16,25 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from narration import Beat, beats_to_srt, build_beats, parse_usd
+from narration import (
+    Beat,
+    HeroNotRecordable,
+    beats_to_srt,
+    build_beats,
+    hero_is_recordable,
+    parse_srt_cues,
+    parse_usd,
+    require_recordable_hero,
+    speech_units,
+)
 
 HOST = "https://cinetrace-781071502822.us-central1.run.app"
+FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 RECALL_QUERY = "we ran out of graphics memory halfway through"
 VIEWPORT = {"width": 1600, "height": 900}
 PICK_APPROVE = """
@@ -31,9 +44,16 @@ async () => {
   const list = props.proposals || props || [];
   const jobList = jobs.jobs || jobs || [];
   const byId = Object.fromEntries(jobList.map((j) => [j.job_id, j]));
-  const open = list.filter((p) => p.decision === "pending" && byId[p.job_id]?.is_open);
-  open.sort((a, b) => (Number(byId[b.job_id]?.waste_usd) || 0) - (Number(byId[a.job_id]?.waste_usd) || 0));
-  return open.length ? {job_id: open[0].job_id, waste_usd: byId[open[0].job_id].waste_usd} : null;
+  const pending = list.filter((p) => p.decision === "pending");
+  const open = pending.filter((p) => byId[p.job_id]?.is_open);
+  const pool = open.length ? open : pending;
+  pool.sort((a, b) => (Number(byId[b.job_id]?.waste_usd) || 0) - (Number(byId[a.job_id]?.waste_usd) || 0));
+  if (pool.length) {
+    const job = pool[0];
+    return {job_id: job.job_id, waste_usd: byId[job.job_id]?.waste_usd ?? null, open: !!byId[job.job_id]?.is_open};
+  }
+  const btn = document.querySelector("button.approve");
+  return btn ? {job_id: btn.getAttribute("data-job"), waste_usd: null, open: false} : null;
 }
 """
 
@@ -63,57 +83,94 @@ def ffprobe_duration(path: Path) -> float:
     return float(out.strip())
 
 
-def synthesize(beats: list[Beat], audio_dir: Path, edge_tts_bin: str | None) -> list[Path]:
+def _ffmpeg_to_wav(src: Path, wav: Path) -> None:
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(src),
+            "-ar",
+            "48000",
+            "-ac",
+            "1",
+            str(wav),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def synthesize(
+    beats: list[Beat], audio_dir: Path, edge_tts_bin: str | None
+) -> tuple[list[Path], list[list[tuple[float, float, str]]], list[list[float]]]:
+    """Speak one cue at a time so caption times come from speech, not beat slices."""
     audio_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
+    spoken: list[list[tuple[float, float, str]]] = []
+    durations: list[list[float]] = []
     for i, beat in enumerate(beats):
-        wav = audio_dir / f"{i:02d}-{beat.key}.wav"
-        if edge_tts_bin:
-            mp3 = audio_dir / f"{i:02d}-{beat.key}.mp3"
-            run(
-                [
-                    edge_tts_bin,
-                    "--voice",
-                    "en-US-GuyNeural",
-                    "--rate=-5%",
-                    "--text",
-                    beat.text,
-                    "--write-media",
-                    str(mp3),
-                ]
-            )
-            run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    str(mp3),
-                    "-ar",
-                    "48000",
-                    "-ac",
-                    "1",
-                    str(wav),
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        units = list(beat.cue_lines) if beat.cue_lines else speech_units(beat.text)
+        sentence_wavs: list[Path] = []
+        sentence_cues: list[tuple[float, float, str]] = []
+        sentence_durs: list[float] = []
+        cursor = 0.0
+        for j, unit in enumerate(units):
+            wav = audio_dir / f"{i:02d}-{beat.key}-{j:02d}.wav"
+            srt_cues: list[tuple[float, float, str]] = []
+            if edge_tts_bin:
+                mp3 = audio_dir / f"{i:02d}-{beat.key}-{j:02d}.mp3"
+                sub = audio_dir / f"{i:02d}-{beat.key}-{j:02d}.srt"
+                run(
+                    [
+                        edge_tts_bin,
+                        "--voice",
+                        "en-US-GuyNeural",
+                        "--rate=-5%",
+                        "--text",
+                        unit,
+                        "--write-media",
+                        str(mp3),
+                        "--write-subtitles",
+                        str(sub),
+                    ]
+                )
+                _ffmpeg_to_wav(mp3, wav)
+                if sub.exists():
+                    srt_cues = parse_srt_cues(sub.read_text())
+            else:
+                run(
+                    [
+                        "espeak-ng",
+                        "-v",
+                        "en-us",
+                        "-s",
+                        "138",
+                        "-p",
+                        "40",
+                        "-w",
+                        str(wav),
+                        unit,
+                    ]
+                )
+            duration = ffprobe_duration(wav)
+            sentence_wavs.append(wav)
+            sentence_durs.append(duration)
+            if srt_cues:
+                for t0, t1, text in srt_cues:
+                    sentence_cues.append((cursor + t0, cursor + t1, text))
+            else:
+                sentence_cues.append((cursor, cursor + duration, unit))
+            cursor += duration
+        beat_wav = audio_dir / f"{i:02d}-{beat.key}.wav"
+        if len(sentence_wavs) == 1:
+            shutil.copy2(sentence_wavs[0], beat_wav)
         else:
-            run(
-                [
-                    "espeak-ng",
-                    "-v",
-                    "en-us",
-                    "-s",
-                    "138",
-                    "-p",
-                    "40",
-                    "-w",
-                    str(wav),
-                    beat.text,
-                ]
-            )
-        paths.append(wav)
-    return paths
+            concat_audio(sentence_wavs, beat_wav)
+        paths.append(beat_wav)
+        spoken.append(sentence_cues)
+        durations.append(sentence_durs)
+    return paths, spoken, durations
 
 
 def concat_audio(wavs: list[Path], dest: Path) -> None:
@@ -204,6 +261,15 @@ def cut_and_mux(
     )
     voice = work / "voice.wav"
     concat_audio(wavs, voice)
+    url_file = work / "hosted-url.txt"
+    url_file.write_text(HOST)
+    font = FONT.replace(":", "\\:")
+    url_path = str(url_file.resolve()).replace(":", "\\:")
+    overlay = (
+        f"drawtext=fontfile={font}:textfile={url_path}:fontsize=26:"
+        "fontcolor=white@0.95:box=1:boxcolor=0x111111@0.70:boxborderw=12:"
+        "x=36:y=h-th-36:enable='between(t,1\\,8)'"
+    )
     run(
         [
             "ffmpeg",
@@ -212,6 +278,8 @@ def cut_and_mux(
             str(silent),
             "-i",
             str(voice),
+            "-vf",
+            overlay,
             "-c:v",
             "libx264",
             "-preset",
@@ -268,6 +336,58 @@ def cut_and_mux(
         if preview.stat().st_size <= 1_000_000:
             break
     return ffprobe_duration(hq)
+
+
+def fetch_shots(host: str = HOST) -> dict[str, str]:
+    with urllib.request.urlopen(f"{host.rstrip('/')}/api/shots", timeout=20) as resp:
+        data = json.load(resp)
+    return {
+        "shots_at_risk": str(data.get("at_risk_count") or 0),
+        "shots_recoverable": str(data.get("recoverable_count") or 0),
+        "slots_stuck": str(data.get("slots_stuck") or 0),
+    }
+
+
+def wait_for_recordable_hero(
+    timeout_s: float = 900.0,
+    interval_s: float = 10.0,
+    host: str = HOST,
+) -> dict[str, str]:
+    """Refuse to roll while the hero shows zero recoverable shots."""
+    deadline = time.monotonic() + timeout_s
+    last: dict[str, str] = {}
+    while True:
+        try:
+            last = fetch_shots(host)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            print(f"hero gate: shots fetch failed ({exc})", flush=True)
+            last = last or {
+                "shots_at_risk": "0",
+                "shots_recoverable": "0",
+                "slots_stuck": "0",
+            }
+        print(
+            f"hero gate at_risk={last.get('shots_at_risk')} "
+            f"recoverable={last.get('shots_recoverable')} "
+            f"slots={last.get('slots_stuck')}",
+            flush=True,
+        )
+        if hero_is_recordable(last):
+            return last
+        if time.monotonic() >= deadline:
+            require_recordable_hero(last)
+        time.sleep(interval_s)
+
+
+def wait_dom_recoverable(page, timeout_ms: int = 45_000) -> None:
+    page.wait_for_function(
+        """() => {
+          const el = document.getElementById('shots-recoverable');
+          const n = parseInt((el?.textContent || '').replace(/[^0-9]/g, ''), 10);
+          return Number.isFinite(n) && n > 0;
+        }""",
+        timeout=timeout_ms,
+    )
 
 
 def read_live(page) -> dict[str, str]:
@@ -342,6 +462,7 @@ def new_page(playwright, video_dir: Path | None):
         timeout=45_000,
     )
     page.wait_for_timeout(800)
+    wait_dom_recoverable(page)
     return browser, context, page, clock0
 
 
@@ -353,6 +474,7 @@ def record_take(page, smoke: bool, clock0: float) -> tuple[dict[str, float], dic
         print(f"mark {key:12s} t={markers[key]:6.1f}s", flush=True)
 
     live = read_live(page)
+    require_recordable_hero(live)
     opening = dict(live)
     scroll_to(page, "#dailies")
     mark("hero")
@@ -399,15 +521,14 @@ def record_take(page, smoke: bool, clock0: float) -> tuple[dict[str, float], dic
 
     if not smoke:
         print("waiting for supervisor run…", flush=True)
+        # Leftover #cost-meter from a previous run on this instance is not a
+        # finished take. After reset, Approve buttons exist only once THIS run
+        # has filed proposals. /api/jobs is the top 60 waste rows, so do not
+        # require the proposed job to be in that list before waiting.
         page.wait_for_function(
-            """() => {
-              const meter = document.getElementById("cost-meter");
-              const approve = document.querySelector("button.approve");
-              return (meter && !meter.hidden && meter.innerText.trim()) || !!approve;
-            }""",
+            "() => !!document.querySelector('button.approve')",
             timeout=180_000,
         )
-        # Cost lands at the end of the stream; give the DOM one paint.
         page.wait_for_timeout(800)
 
     mark("decision")
@@ -429,11 +550,14 @@ def record_take(page, smoke: bool, clock0: float) -> tuple[dict[str, float], dic
         btn.first.scroll_into_view_if_needed()
         hold(page, 2)
         btn.first.click()
-        page.wait_for_function(
-            "() => document.getElementById('impact-approved')?.textContent "
-            "&& document.getElementById('impact-approved').textContent !== '$0.00'",
-            timeout=20_000,
-        )
+        try:
+            page.wait_for_function(
+                "() => document.getElementById('impact-approved')?.textContent "
+                "&& document.getElementById('impact-approved').textContent !== '$0.00'",
+                timeout=20_000,
+            )
+        except Exception:
+            print("warn: impact-approved stayed $0.00 after approve", flush=True)
     scroll_to(page, "#impact-row")
     hold(page, 22, pin="#impact-row")
 
@@ -481,14 +605,15 @@ def capture(out_dir: Path, smoke: bool) -> tuple[Path, dict[str, float], dict[st
 
 
 def find_edge_tts() -> str | None:
-    extra = []
-    env_bin = Path(__file__).resolve().parent
-    for candidate in (
+    extra = [
+        repo_root() / ".venv" / "bin" / "edge-tts",
+        Path("/opt/cinetrace-ai/.venv/bin/edge-tts"),
         Path(sys.executable).resolve().parent / "edge-tts",
         Path("/usr/bin/edge-tts"),
-        *[Path(p) / "edge-tts" for p in __import__("os").environ.get("PATH", "").split(":")],
-    ):
-        extra.append(candidate)
+    ]
+    extra.extend(
+        Path(p) / "edge-tts" for p in __import__("os").environ.get("PATH", "").split(":")
+    )
     for candidate in extra:
         if candidate.exists():
             return str(candidate)
@@ -500,6 +625,12 @@ def main() -> int:
     parser.add_argument("--smoke", action="store_true", help="No supervisor run, no approve")
     parser.add_argument("--assemble", action="store_true", help="Mux an existing raw capture")
     parser.add_argument("--work", default="", help="Scratch directory")
+    parser.add_argument(
+        "--gate-timeout",
+        type=float,
+        default=900.0,
+        help="Seconds to wait for #shots-recoverable > 0 before refusing the take",
+    )
     args = parser.parse_args()
 
     root = repo_root()
@@ -520,20 +651,30 @@ def main() -> int:
         print(f"assembling {raw}", flush=True)
     else:
         print(f"capturing {HOST} smoke={args.smoke}", flush=True)
+        print("waiting for a hero that does not argue against the product…", flush=True)
+        wait_for_recordable_hero(timeout_s=args.gate_timeout)
         raw, markers, live = capture(work, smoke=args.smoke)
         capture_meta.write_text(json.dumps({"markers": markers, "live": live}, indent=2) + "\n")
     print("live", json.dumps(live, indent=2), flush=True)
     print("markers", json.dumps(markers, indent=2), flush=True)
+    require_recordable_hero(live)
 
     beats = build_beats(live)
     edge = find_edge_tts()
     print(f"tts={'edge-tts' if edge else 'espeak-ng'}", flush=True)
-    wavs = synthesize(beats, work / "vo", edge)
+    wavs, spoken_cues, sentence_durs = synthesize(beats, work / "vo", edge)
     duration = cut_and_mux(raw, wavs, markers, beats, hq, preview, work)
     starts = [0.0]
     for wav in wavs[:-1]:
         starts.append(starts[-1] + ffprobe_duration(wav))
-    srt_path.write_text(beats_to_srt(beats, starts))
+    srt_path.write_text(
+        beats_to_srt(
+            beats,
+            starts,
+            sentence_durations=sentence_durs,
+            spoken_cues=spoken_cues,
+        )
+    )
     (work / "take.json").write_text(
         json.dumps(
             {

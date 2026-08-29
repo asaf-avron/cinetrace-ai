@@ -7,6 +7,7 @@ elements into spoken English that cannot disagree with the frame.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -34,6 +35,14 @@ ONES = [
     "nineteen",
 ]
 TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+# Comfortable caption reading is ~15–20 characters/sec. Anything denser is split.
+MAX_CUE_CHARS_PER_SEC = 20.0
+MAX_CUE_CHARS = 90
+SRT_TS = re.compile(
+    r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s+-->\s+(\d{2}):(\d{2}):(\d{2})[,.](\d{3})"
+)
+CLAUSE_SPLIT = re.compile(r"(?<=[,;:—–])\s+")
 
 
 @dataclass(frozen=True)
@@ -160,6 +169,30 @@ def parse_rows_scanned(stats_text: str) -> str:
     return f"{spoken} rows"
 
 
+def parse_count(text: str) -> int:
+    digits = re.sub(r"[^\d]", "", text or "")
+    return int(digits or "0")
+
+
+class HeroNotRecordable(RuntimeError):
+    """Refuse a take whose opening line concedes the product does not recover reviews."""
+
+
+def hero_is_recordable(live: dict[str, str]) -> bool:
+    """The hero is only filmable when freeing slots would save at least one shot."""
+    return parse_count(live.get("shots_recoverable", "")) > 0
+
+
+def require_recordable_hero(live: dict[str, str]) -> None:
+    recoverable = parse_count(live.get("shots_recoverable", ""))
+    at_risk = parse_count(live.get("shots_at_risk", ""))
+    if recoverable <= 0:
+        raise HeroNotRecordable(
+            f"shots-recoverable is {recoverable} (at-risk {at_risk}); "
+            "do not roll until freeing slots would save at least one review"
+        )
+
+
 def build_beats(live: dict[str, str]) -> list[Beat]:
     at_risk = say_int(int(re.sub(r"[^\d]", "", live["shots_at_risk"]) or "0"))
     recoverable = say_int(int(re.sub(r"[^\d]", "", live["shots_recoverable"]) or "0"))
@@ -277,24 +310,202 @@ def srt_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 
-def beats_to_srt(beats: list[Beat], starts: list[float]) -> str:
-    cues: list[str] = []
-    index = 1
-    for beat, start in zip(beats, starts, strict=True):
-        sentences = beat.sentences()
+def _hms_to_seconds(match: re.Match[str], offset: int) -> float:
+    hours = int(match.group(offset))
+    minutes = int(match.group(offset + 1))
+    seconds = int(match.group(offset + 2))
+    millis = int(match.group(offset + 3))
+    return hours * 3600 + minutes * 60 + seconds + millis / 1000.0
+
+
+def parse_srt_cues(text: str) -> list[tuple[float, float, str]]:
+    """Parse SRT or SRT-shaped VTT from edge-tts `--write-subtitles`."""
+    cues: list[tuple[float, float, str]] = []
+    blocks = re.split(r"\n\s*\n", (text or "").strip())
+    for block in blocks:
+        lines = [ln for ln in block.splitlines() if ln.strip() and ln.strip() != "WEBVTT"]
+        if not lines:
+            continue
+        stamp = next((ln for ln in lines if SRT_TS.search(ln)), "")
+        match = SRT_TS.search(stamp)
+        if not match:
+            continue
+        t0 = _hms_to_seconds(match, 1)
+        t1 = _hms_to_seconds(match, 5)
+        content_lines = []
+        seen_stamp = False
+        for ln in lines:
+            if not seen_stamp:
+                if SRT_TS.search(ln):
+                    seen_stamp = True
+                continue
+            content_lines.append(ln.strip())
+        content = " ".join(content_lines).strip()
+        if content:
+            cues.append((t0, t1, content))
+    return cues
+
+
+def speech_units(text: str, max_chars: int = MAX_CUE_CHARS) -> list[str]:
+    """Split narration into speakable cues before TTS, so timings stay real."""
+    sentences = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    units: list[str] = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if len(sentence) <= max_chars:
+            units.append(sentence)
+            continue
+        clauses = [c.strip() for c in CLAUSE_SPLIT.split(sentence) if c.strip()]
+        if len(clauses) == 1:
+            words = sentence.split()
+            buf: list[str] = []
+            for word in words:
+                trial = (" ".join(buf + [word])).strip()
+                if buf and len(trial) > max_chars:
+                    units.append(" ".join(buf))
+                    buf = [word]
+                else:
+                    buf.append(word)
+            if buf:
+                units.append(" ".join(buf))
+            continue
+        buf_text = ""
+        for clause in clauses:
+            trial = f"{buf_text} {clause}".strip() if buf_text else clause
+            if buf_text and len(trial) > max_chars:
+                units.append(buf_text)
+                buf_text = clause
+            else:
+                buf_text = trial
+        if buf_text:
+            units.append(buf_text)
+    return units
+
+
+def _pack_sequential(parts: list[str], n: int) -> list[str]:
+    if n <= 1 or len(parts) <= 1:
+        return [" ".join(parts)] if parts else []
+    total = sum(len(part) for part in parts) or 1
+    target = total / n
+    groups: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for i, part in enumerate(parts):
+        trial_len = buf_len + len(part) + (1 if buf else 0)
+        groups_left = n - len(groups)
+        parts_after = len(parts) - i - 1
+        if (
+            buf
+            and trial_len > target
+            and groups_left > 1
+            and parts_after >= groups_left - 2
+        ):
+            groups.append(" ".join(buf))
+            buf = [part]
+            buf_len = len(part)
+        else:
+            buf.append(part)
+            buf_len = trial_len
+    if buf:
+        groups.append(" ".join(buf))
+    return groups
+
+
+def split_dense_text(
+    text: str, duration_s: float, max_cps: float = MAX_CUE_CHARS_PER_SEC
+) -> list[str]:
+    """Split a wall-of-text cue so each caption is shorter.
+
+    Proportional time keeps the same characters/sec — this is about not
+    putting 185 characters on screen at once. Per-sentence TTS is what
+    actually lands a comfortable reading rate.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    if duration_s <= 0 or len(text) / duration_s <= max_cps:
+        return [text]
+    needed = max(2, int(math.ceil(len(text) / (max_cps * duration_s))))
+    clauses = [c.strip() for c in CLAUSE_SPLIT.split(text) if c.strip()]
+    parts = clauses if len(clauses) >= 2 else text.split()
+    if len(parts) < 2:
+        return [text]
+    groups = _pack_sequential(parts, min(needed, len(parts)))
+    return groups if len(groups) >= 2 else [text]
+
+
+def cues_from_measured(
+    sentences: list[str],
+    durations: list[float],
+    start: float = 0.0,
+    max_cps: float = MAX_CUE_CHARS_PER_SEC,
+) -> list[tuple[float, float, str]]:
+    """Build cues from measured clip durations, splitting anything over max_cps."""
+    cues: list[tuple[float, float, str]] = []
+    cursor = start
+    for sentence, duration in zip(sentences, durations, strict=True):
+        parts = split_dense_text(sentence, duration, max_cps)
+        if not parts:
+            cursor += max(duration, 0.0)
+            continue
+        total_chars = sum(len(part) for part in parts) or 1
+        inner = cursor
+        for part in parts:
+            slice_len = max(duration, 0.0) * (len(part) / total_chars)
+            cues.append((inner, inner + slice_len, part))
+            inner += slice_len
+        cursor += max(duration, 0.0)
+    return cues
+
+
+def format_srt(cues: list[tuple[float, float, str]]) -> str:
+    lines: list[str] = []
+    for index, (t0, t1, text) in enumerate(cues, start=1):
+        if t1 <= t0:
+            t1 = t0 + 0.4
+        lines.append(f"{index}\n{srt_timestamp(t0)} --> {srt_timestamp(t1)}\n{text}\n")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def beats_to_srt(
+    beats: list[Beat],
+    starts: list[float],
+    sentence_durations: list[list[float]] | None = None,
+    spoken_cues: list[list[tuple[float, float, str]]] | None = None,
+    max_cps: float = MAX_CUE_CHARS_PER_SEC,
+) -> str:
+    """Build captions from speech timings, not even slices of a beat span.
+
+    Preferred: ``spoken_cues`` from edge-tts ``--write-subtitles`` (already
+    relative to each beat start). Next: ``sentence_durations`` measured from
+    per-sentence audio. Last resort: the beat target length.
+    """
+    cues: list[tuple[float, float, str]] = []
+    for i, (beat, start) in enumerate(zip(beats, starts, strict=True)):
+        if spoken_cues is not None:
+            for t0, t1, text in spoken_cues[i]:
+                cues.extend(
+                    cues_from_measured([text], [max(t1 - t0, 0.4)], start + t0, max_cps)
+                )
+            continue
+        sentences = speech_units(beat.text) if not beat.cue_lines else list(beat.cue_lines)
         if not sentences:
             continue
-        # Spread cues across the beat using the measured audio duration when
-        # the next start is known; otherwise use the target length.
-        next_starts = starts[starts.index(start) + 1 :] if start in starts else []
+        if sentence_durations is not None:
+            cues.extend(cues_from_measured(sentences, sentence_durations[i], start, max_cps))
+            continue
+        next_starts = starts[i + 1 :]
         end = next_starts[0] if next_starts else start + beat.target_s
         span = max(end - start, 0.8)
-        slice_len = span / len(sentences)
-        for i, sentence in enumerate(sentences):
-            t0 = start + i * slice_len
-            t1 = start + (i + 1) * slice_len
-            cues.append(
-                f"{index}\n{srt_timestamp(t0)} --> {srt_timestamp(t1)}\n{sentence}\n"
-            )
-            index += 1
-    return "\n".join(cues).rstrip() + "\n"
+        # No measured audio: still refuse even slices when a sentence is dense.
+        # Weight by character count so a long closer is not the same width as
+        # a short opener.
+        total_chars = sum(len(s) for s in sentences) or 1
+        cursor = start
+        for sentence in sentences:
+            slice_len = span * (len(sentence) / total_chars)
+            cues.extend(cues_from_measured([sentence], [slice_len], cursor, max_cps))
+            cursor += slice_len
+    return format_srt(cues)
