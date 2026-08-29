@@ -193,3 +193,60 @@ def test_delivery_board_has_something_at_stake() -> None:
     shots = fetch_shots_at_risk()
     assert shots["tracked_count"] > 0
     assert shots["slots_stuck"] > 0, "zombie and idle-queue jobs should hold slots"
+
+
+# One seeded job per waste story, with the answer decided before the farm was
+# written. is_open is part of the answer: a completed overrun is real money but
+# no action reclaims it, so it belongs in the history and never in the
+# actionable total.
+GROUND_TRUTH = {
+    "job-fail-oom": ("failed", True),
+    "job-fail-lic": ("failed", True),
+    "job-retry-loop": ("failed", True),
+    "job-idle-queue": ("idle_queue", True),
+    "job-zombie": ("zombie", True),
+    "job-overrun": ("overrun", False),
+}
+
+
+@needs_clickhouse
+def test_detector_recovers_every_seeded_archetype() -> None:
+    """Score the classifier instead of admiring it.
+
+    Synthetic data is usually an epistemological problem -- you cannot tell a
+    finding from a coincidence. Here it is the opposite: ARCHETYPES_SQL writes
+    six jobs whose correct class is known in advance, so job_waste can be
+    measured against ground truth rather than inspected by eye.
+    """
+    from cinetrace.clickhouse.client import get_client
+
+    client = get_client()
+    try:
+        rows = client.query(
+            "SELECT job_id, waste_class, is_open, retry_loop FROM job_waste "
+            "WHERE job_id IN {ids:Array(String)}",
+            parameters={"ids": list(GROUND_TRUTH)},
+        ).result_rows
+    finally:
+        client.close()
+
+    found = {row[0]: (row[1], bool(row[2]), bool(row[3])) for row in rows}
+    missing = sorted(set(GROUND_TRUTH) - set(found))
+    assert not missing, f"seeded archetypes absent from the farm: {missing}"
+
+    misclassified = {
+        job: {"got": found[job][0], "expected": want}
+        for job, (want, _) in GROUND_TRUTH.items()
+        if found[job][0] != want
+    }
+    assert not misclassified, f"detector missed ground truth: {misclassified}"
+
+    wrong_openness = {
+        job: found[job][1]
+        for job, (_, want_open) in GROUND_TRUTH.items()
+        if found[job][1] != want_open
+    }
+    assert not wrong_openness, f"is_open disagrees with the design: {wrong_openness}"
+
+    assert found["job-retry-loop"][2], "retry_count 9 has to raise the retry_loop tag"
+    assert not found["job-zombie"][2], "retry_count 2 must not raise it"

@@ -31,12 +31,25 @@ The headline is not dollars, it is **"7 shots will miss review, 5 are
 recoverable"** — a count that moves with the farm, climbing as a review
 approaches and resetting when the session rolls. The two numbers rarely match,
 which is the point: some shots are already too far behind for freed capacity to
-save. Underneath it, three Gemini agents on Google Cloud ADK run a fixed
+save.
+
+Both come out of a single SQL projection rather than a rule of thumb. It walks
+each show's shot queue in review order, accumulating the frames still owed ahead
+of every shot with a window function, then divides by the slots that show is
+actually running to get an ETA. The per-frame rate is not a constant — it is the
+median hours-per-frame for that show and renderer, read from a
+`quantileTDigest` baseline over completed jobs, so a slow renderer is not
+mistaken for a late shot. A shot is at risk when its ETA runs past its review
+time. It is *recoverable* when the same arithmetic, re-run with the zombie and
+idle-queue slots handed back, brings it inside the deadline. That difference is
+the entire product thesis, expressed as a column.
+
+Underneath it, three Gemini agents on Google Cloud ADK run a fixed
 detect → decide → act pipeline:
 
 - The **Diagnostic Sentinel** is given the schema and a goal, not a list of
   queries. It composes its own SQL through the official `mcp-clickhouse` server
-  — 7 to 16 `run_query` calls per run, depending on how many passes it decides
+  — 6 to 16 `run_query` calls per run, depending on how many passes it decides
   to take — starting broad and drilling into whatever looks worst. When it finds
   an OOM failure it runs an `ASOF LEFT JOIN` against a quarter-billion telemetry
   samples to find the last reading before the job died, and reports things like
@@ -52,9 +65,13 @@ detect → decide → act pipeline:
   before the row is written, and a shot that is comfortably on track gets the
   claim dropped rather than recorded.
 
-Nothing reaches a render host. A proposal is an auditable record, and the dollar
-figure on the page only moves when a human clicks Approve — an agent finding
-waste does not reduce your bill, a supervisor approving the fix does.
+Nothing reaches a render host. Each proposal arrives as a row in the supervisor
+UI carrying the evidence it was built from — the job, the action, the shot it
+protects, and the Sentinel's own reasoning — with Approve and Reject sitting
+beside it. Approving credits that one job's waste to the Impact card and writes
+an append-only decision record; rejecting is recorded just as permanently and
+credits nothing. The dollar figure only moves on approval, because an agent
+finding waste does not reduce your bill and a supervisor approving the fix does.
 
 The farm is live while you watch it: a background ticker writes fresh telemetry
 every 30 seconds and the page streams updates over SSE.
@@ -163,6 +180,13 @@ Two guards enforce that in code rather than in prompt wording: a proposal
 claiming it protects a shot has the claim dropped unless the live delivery board
 agrees, and a job id that does not resolve to a real job is refused outright. It
 would have been easy to make every number look recoverable.
+
+And the detector is scored, not admired. Synthetic data usually costs you the
+ability to tell a finding from a coincidence; here it buys the opposite, because
+the generator seeds six jobs whose correct classification is known before the
+farm is written. A test in CI asserts that the `job_waste` view recovers all six
+in their own class — including that a completed overrun is real money but stays
+out of the actionable total, since no action reclaims hours already spent.
 
 And the supervisor reports its own cost. A tool that kills compute waste should
 be able to say what it spends: three to four cents of Gemini per run.
