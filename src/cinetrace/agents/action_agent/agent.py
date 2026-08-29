@@ -25,7 +25,10 @@ The Studio Orchestrator's plan:
 {orchestrator_plan?}
 
 For each job in that plan, call propose_remediation exactly once with:
-  job_id    - the id from the plan, unchanged
+  job_id    - the job id on its own, e.g. "job-zombie" or "job-live-902506".
+              The plan names a show alongside each job; that belongs in
+              shot_at_risk, never here. An id with anything else attached to it
+              matches no job and is refused.
   action    - one of: """
     + _ACTIONS
     + """

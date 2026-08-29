@@ -70,6 +70,50 @@ def _verify_shot(value: str, at_risk: frozenset[tuple[str, str]]) -> str:
     return ""
 
 
+# The Orchestrator's plan carries the show and the job on one line, and the
+# Action Agent is told to copy the id across unchanged -- so it sometimes copies
+# "ORBIT job-zombie", which matches no job and cannot be executed against. Every
+# id this farm generates starts with "job-", which makes the contamination
+# separable from the id.
+_JOB_ID_RE = re.compile(r"job-[A-Za-z0-9_-]+")
+_BARE_JOB_ID_RE = re.compile(r"^job-[A-Za-z0-9_-]+$")
+
+
+def _resolve_job_id(value: str) -> str:
+    """Return the job_id to record, or "" if the string names no usable job.
+
+    A value that is already a bare id is taken as given. Whether the farm holds
+    that job is not this function's question -- the Sentinel only reports ids it
+    queried -- and a lookup per proposal would tax the happy path to answer it.
+
+    The work here is undoing contamination. When an id arrives with something
+    glued to it, the string alone cannot say which token is the job, so
+    render_jobs is asked.
+    """
+    raw = value.strip()
+    if _BARE_JOB_ID_RE.match(raw):
+        return raw
+    candidates: list[str] = []
+    for candidate in _JOB_ID_RE.findall(raw):
+        if candidate not in candidates:
+            candidates.append(candidate)
+    if not candidates:
+        return ""
+    client = get_client()
+    try:
+        found = {
+            row[0]
+            for row in client.query(
+                "SELECT DISTINCT job_id FROM render_jobs "
+                "WHERE job_id IN {ids:Array(String)}",
+                parameters={"ids": candidates},
+            ).result_rows
+        }
+    finally:
+        client.close()
+    return next((c for c in candidates if c in found), "")
+
+
 PROPOSAL_COLUMNS = [
     "job_id",
     "action",
@@ -96,7 +140,11 @@ def propose_remediation(
     first.
 
     Args:
-        job_id: The render job to act on, exactly as it appears in render_jobs.
+        job_id: The render job to act on, on its own and exactly as it appears
+            in render_jobs: "job-zombie", never "ORBIT job-zombie". An id that
+            arrives with a show attached is resolved against render_jobs where
+            that is possible and refused where it is not, in which case nothing
+            is recorded and the response says so.
         action: One of hold_license_job, hold_oom_job, stop_retry_loop,
             kill_zombie, release_idle_queue, flag_overrun.
         reason: One sentence of evidence, including the measured number that
@@ -109,6 +157,23 @@ def propose_remediation(
     """
     if action not in ALLOWED_ACTIONS:
         raise ValueError(f"Unknown action {action!r}. Allowed: {sorted(ALLOWED_ACTIONS)}")
+    # Unlike the shot claim below, job_id is the subject of the row rather than
+    # an attribute of it. A proposal naming "ORBIT job-zombie" is not a weaker
+    # proposal, it is an unexecutable one, and it sits in the audit table looking
+    # identical to a real one. So it is resolved if it can be and refused if it
+    # cannot -- without raising, because ADK turns a tool exception into a failed
+    # run instead of feedback the model can act on.
+    resolved_job = _resolve_job_id(job_id)
+    if not resolved_job:
+        return {
+            "job_id": job_id,
+            "persisted": False,
+            "error": (
+                f"{job_id!r} does not name a job in render_jobs, so nothing was "
+                "recorded. Pass the job_id on its own, exactly as the Sentinel "
+                "reported it, with no show name attached."
+            ),
+        }
     # "Protects a review" is the strongest claim this product makes, so it is
     # the one claim a model does not get to assert unchecked. A shot with a
     # review in an hour that is still projected to make it is not protected by
@@ -133,13 +198,23 @@ def propose_remediation(
     try:
         client.insert(
             "remediation_proposals",
-            [[job_id, action, reason, verified_shot, "action_agent", "dry_run", "proposed", "", 0]],
+            [[
+                resolved_job,
+                action,
+                reason,
+                verified_shot,
+                "action_agent",
+                "dry_run",
+                "proposed",
+                "",
+                0,
+            ]],
             column_names=PROPOSAL_COLUMNS,
         )
     finally:
         client.close()
     return {
-        "job_id": job_id,
+        "job_id": resolved_job,
         "action": action,
         "reason": reason,
         "shot_at_risk": verified_shot,

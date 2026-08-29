@@ -54,7 +54,9 @@ Allowed actions: """
 
 Reply with a short plan. One line per job: the job_id, the action, and one
 sentence of justification that quotes the Sentinel's evidence or the delivery
-impact. Name the show/shot each job protects, in the form "SHOW shotid", so the
+impact. Write the job_id exactly as the Sentinel reported it and nothing else --
+"job-zombie", never "ORBIT job-zombie". The show belongs to the shot it
+protects, not to the job. Name that show/shot in the form "SHOW shotid", so the
 Action Agent can record it; write "none" only when the job genuinely blocks no
 delivery. Then state which reviews this plan is intended to save.
 

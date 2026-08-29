@@ -14,6 +14,11 @@ nothing". That also keeps pytest rows out of the demo the judges see.
 The dollar figure moving on approval is asserted through the SQL contract in
 test_impact.py rather than here, because the impact aggregates dedupe by job and
 a supervisor run may already have filed a proposal for the same archetype.
+
+For the same reason nothing here files a contaminated id end to end: resolving
+"ORBIT job-zombie" only works if job-zombie is real, and cleaning up afterwards
+would leave a mutation on a showcase job that could swallow a genuine proposal
+mid-demo. `_resolve_job_id` is tested directly against the farm instead.
 """
 
 import uuid
@@ -115,6 +120,54 @@ def test_a_multi_shot_claim_keeps_the_one_the_board_agrees_with() -> None:
     assert _verify_shot("NEBULA sh0202, ORBIT sh0194", at_risk) == ""
     assert _verify_shot("the NEBULA one", at_risk) == ""
     assert _verify_shot("none", at_risk) == ""
+
+
+def test_a_bare_job_id_is_taken_as_given() -> None:
+    """The happy path must not cost a round trip, or every proposal pays for it."""
+    from cinetrace.clickhouse.proposals import _resolve_job_id
+
+    assert _resolve_job_id("job-zombie") == "job-zombie"
+    assert _resolve_job_id("job-live-902506") == "job-live-902506"
+    assert _resolve_job_id("  job-fail-oom  ") == "job-fail-oom"
+    assert _resolve_job_id("") == ""
+    assert _resolve_job_id("none") == ""
+
+
+@needs_clickhouse
+def test_a_show_glued_to_the_job_id_is_peeled_off() -> None:
+    """The Orchestrator puts the show and the job on one line.
+
+    The Action Agent, told to copy the id "unchanged", copied "ORBIT
+    job-zombie" -- which joins to no job, so the proposal named something
+    nobody could act on while looking exactly like a real row.
+    """
+    from cinetrace.clickhouse.proposals import _resolve_job_id
+
+    assert _resolve_job_id("ORBIT job-zombie") == "job-zombie"
+    assert _resolve_job_id("DRIFT job-live-902506") == "job-live-902506"
+    assert _resolve_job_id("kill job-idle-queue on NEBULA") == "job-idle-queue"
+    assert _resolve_job_id("ORBIT job-does-not-exist-at-all") == ""
+
+
+@needs_clickhouse
+def test_a_job_nobody_can_act_on_is_not_recorded() -> None:
+    """Refused, not raised: ADK turns a tool exception into a failed run."""
+    from cinetrace.clickhouse.proposals import propose_remediation
+
+    bogus = "NEBULA job-live-000000000"
+    result = propose_remediation(bogus, "kill_zombie", "because")
+    assert result["persisted"] is False
+    assert "does not name a job" in result["error"]
+
+    client = get_client()
+    try:
+        filed = client.query(
+            "SELECT count() FROM proposal_state WHERE job_id = {jid:String}",
+            parameters={"jid": bogus},
+        ).result_rows[0][0]
+        assert filed == 0
+    finally:
+        client.close()
 
 
 @needs_clickhouse
