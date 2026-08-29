@@ -15,20 +15,27 @@ Screen capture with voiceover. No slides, no title cards beyond a few seconds.
    takes as well, not just once: proposals accumulate, and three rehearsal runs
    leave the same job in the table two or three times over, each protecting a
    different shot as the board moves.
-3. Load the page and click **Run supervisor**. The run now streams: a sticky
-   run bar docks under the nav with Detect → Decide → Dry-run, the elapsed
-   timer, and the live status. Each SQL statement appears as the Sentinel
-   writes it. Hold on the bar and the MCP list. Allow 90 to 100 seconds. After
-   it finishes the bar hides; reload once so `/api/last-run` keeps the evidence
-   on screen.
+3. Optionally spend one run as a smoke test: click **Run supervisor** and watch
+   a sticky bar dock under the nav with Detect → Decide → Dry-run, the elapsed
+   timer, and each SQL statement appearing as the Sentinel writes it. Time it —
+   runs land between 65 and 101 seconds and you want to know today's number
+   before you roll. Then go back to step 2 and reset, because the take has its
+   own run and you do not want this one's proposals still in the table.
 4. Browser at 1600px wide, dark OS theme, no bookmarks bar, no extensions.
 5. Check "Dailies at risk" shows a handful, not zero and not forty.
 
-**Do this run last.** The agent timeline and the MCP list are held in memory on
-the instance, not in ClickHouse, so any deploy wipes them and the evidence
-panels go blank until someone runs the supervisor again. A push touching
+**Land your code before you roll.** The agent timeline and the MCP list are held
+in memory on the instance, not in ClickHouse, so any deploy wipes them and the
+evidence panels go blank until someone runs the supervisor again. A push touching
 `src/**`, the Dockerfile or `pyproject.toml` redeploys; docs-only pushes do not.
-Land your code first, then run, then record.
+No state you film survives a deploy, so finish the code first.
+
+**Five runs an hour.** The supervisor allows five runs per rolling hour and
+answers the sixth with a 429, on camera if that is where you are. Rehearsal runs
+count against it. Budget the takes; if you burn the allowance, wait it out,
+because the only other way to clear the counter is a redeploy and that wipes the
+evidence panels. Approvals are capped far higher, at sixty an hour, so
+re-recording the Approve beat costs nothing.
 
 ## The cut
 
@@ -58,6 +65,13 @@ Pan across the scale strip. Point at the live pill counting up.
 
 Stay on the three-agent panel while the run is in flight. The run bar under
 the nav and the SQL list are the shot — do not cut away to a spinner.
+
+Click **Run supervisor** at the top of the take, over the hero read, not here.
+Runs land between 65 and 101 seconds, so a click at 0:35 can still be streaming
+when the Orchestrator beat is due at 1:50, while a click at 0:05 has SQL on
+screen by 0:35 and is finished with room to spare. The first statements appear
+within a few seconds of the click, so there is always something on screen to
+hold on.
 
 > "Three Gemini agents on Google Cloud ADK. The Sentinel isn't given queries —
 > it's given the schema and a goal, and it writes its own SQL through the
@@ -108,7 +122,15 @@ better beat than a full column.
 
 **2:20–2:45 — Approval is the product**
 
-Click **Approve** on a proposal. Cut to the Impact card moving.
+Click **Approve** on a proposal, then cut to the Impact card moving.
+
+Pick the most expensive row — a zombie, not a retry loop. Only jobs that are
+still open credit a saving, and the credit is that one job's own waste, so the
+size of the jump is entirely your choice of row: in rehearsal a zombie moved
+`remaining` by $104.85 and a retry loop by $15.42. This number moving is the
+payoff of the whole video, so make it one the eye catches. A job that is already
+approved will not move it twice, which is the other reason to reset between
+takes.
 
 > "Nothing has touched a render host. A proposal is a record, and the number
 > only moves when a human approves it — because an agent finding waste doesn't
