@@ -7,7 +7,7 @@ description: Interact with Paperclip company CIN (CineTrace AI) — issues, agen
 
 Use this skill for **board/API work** on CineTrace AI. Use `oracle-connection` for SSH/host facts. Both are CIN-only.
 
-**Never** operate on SYN/Maqom. Never `companies[0]`. Never source `paperclip-env.sh` without `PAPERCLIP_COMPANY_ISSUE_PREFIX=CIN`, and still assert the resolved id is not `94bea508-f6a9-44db-b44c-ff6a6974b3e5`.
+**Never** operate on SYN/Maqom. **Never** operate on PKN/PocketNode Core (UUID `2dfca2d5-4c80-4a9d-b5bb-19b9323c5a20`). Never `companies[0]`. Never source `paperclip-env.sh` without `PAPERCLIP_COMPANY_ISSUE_PREFIX=CIN`, and still assert the resolved id is not `94bea508-f6a9-44db-b44c-ff6a6974b3e5`.
 
 Do not commit board tokens. Read `PAPERCLIP_API_KEY` on Oracle from `/opt/milepo-oracle/.env`.
 
@@ -74,5 +74,7 @@ Feature branches + PRs only. Never push `main` from an agent.
 
 - Company filter: `issuePrefix == "CIN"`
 - No SYN issue ids (`SYN-*`)
+- No PKN issue ids (`PKN-*`)
 - No `/opt/milepo` or `milepo-oracle` worktrees
-- No importing Milepo company skills onto CIN unless explicitly asked
+- No `/opt/pocketnode-core` worktrees
+- No importing Milepo or PocketNode company skills onto CIN unless explicitly asked

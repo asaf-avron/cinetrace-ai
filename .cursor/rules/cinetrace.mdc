@@ -23,4 +23,4 @@ No secrets in git. Use env files (gitignored) or Secret Manager.
 
 This repo stays **private** until pre-submit. Do not add or commit an OSS license unless asked.
 
-Oracle/Paperclip is allowed **only** for company **CIN / CineTrace AI**. Do not operate on SYN/Maqom. Do not change `/opt/milepo-oracle` deploy defaults to CIN. Use `.cursor/skills/oracle-connection` and resolve the company by `issuePrefix == "CIN"` (never `companies[0]`).
+Oracle/Paperclip is allowed **only** for company **CIN / CineTrace AI**. Do not operate on SYN/Maqom. Do not operate on PKN/PocketNode Core. Do not change `/opt/milepo-oracle` deploy defaults to CIN. Use `.cursor/skills/oracle-connection` and resolve the company by `issuePrefix == "CIN"` (never `companies[0]`).

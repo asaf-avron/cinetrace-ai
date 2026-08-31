@@ -7,7 +7,7 @@ description: Provides connection details and service discovery for Oracle infras
 
 This skill is for the **cinetrace-ai** workspace. Paperclip work is **CIN / CineTrace AI only**.
 
-**Never** list, patch, archive, or delete company **SYN / Maqom**. Never treat `companies[0]` as CIN. Never `source /opt/milepo-oracle/scripts/paperclip-env.sh` without `PAPERCLIP_COMPANY_ISSUE_PREFIX=CIN` — that script defaults to SYN and falls back to the first company if the prefix is missing.
+**Never** list, patch, archive, or delete company **SYN / Maqom**. **Never** list, patch, archive, or delete company **PKN / PocketNode Core** (UUID `2dfca2d5-4c80-4a9d-b5bb-19b9323c5a20`). Never treat `companies[0]` as CIN. Never `source /opt/milepo-oracle/scripts/paperclip-env.sh` without `PAPERCLIP_COMPANY_ISSUE_PREFIX=CIN` — that script defaults to SYN and falls back to the first company if the prefix is missing.
 
 Do not change `/opt/milepo-oracle` deploy defaults to CIN. Do not commit board tokens or `.env` into this repo.
 
