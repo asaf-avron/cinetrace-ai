@@ -39,6 +39,8 @@ jobs:
       # judging runs 23 Sep - 7 Oct, a cold start costs ~9s of a judge's
       # patience, and the live farm ticker is a background task that stops dead
       # if Cloud Run reclaims the CPU between requests.
+      # LIVE_TICKER_ENABLED is owned by the live revision (off until
+      # wake-clickhouse.yml flips it on 21 Sep). Do not pass it here.
       - name: Deploy Cloud Run
         run: |
           gcloud run deploy "${SERVICE}" \
@@ -50,7 +52,7 @@ jobs:
             --no-cpu-throttling \
             --memory=2Gi \
             --timeout=600 \
-            --update-env-vars SUPERVISOR_RUN_PUBLIC=true,LIVE_TICKER_ENABLED=true,DEMO_RESET_HOUR_UTC=6 \
+            --update-env-vars SUPERVISOR_RUN_PUBLIC=true,DEMO_RESET_HOUR_UTC=6 \
             --quiet
           gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" \

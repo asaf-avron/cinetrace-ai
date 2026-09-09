@@ -1,0 +1,55 @@
+# Re-enable the live ticker the day before judging so ClickHouse is awake
+# when a judge opens the URL. GitHub cron has no year field; this fires
+# every 21 Sep at 15:00 UTC (18:00 IDT / 08:00 PDT).
+name: Wake ClickHouse before judging
+
+on:
+  schedule:
+    - cron: "0 15 21 9 *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: cinetrace-ai
+  REGION: us-central1
+  SERVICE: cinetrace
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Enable live ticker
+        run: |
+          gcloud run services update "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --update-env-vars LIVE_TICKER_ENABLED=true \
+            --quiet
+
+      - name: Confirm ticker is on
+        run: |
+          URL=$(gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)')
+          sleep 20
+          curl -fsS "${URL}/api/health" | tee /tmp/health.json
+          python3 -c '
+          import json
+          health = json.load(open("/tmp/health.json"))
+          live = health.get("live") or {}
+          assert live.get("enabled") is True, health
+          print("ticker is on")
+          '

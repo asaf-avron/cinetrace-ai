@@ -15,7 +15,7 @@ survive it without a human doing daily chores.
 | Risk | Mitigation | Where |
 | --- | --- | --- |
 | Cold start costs a judge ~9s | `--min-instances=1`, `--no-cpu-throttling` | [deploy-cloud-run.yml](../.github/workflows/deploy-cloud-run.yml) |
-| ClickHouse Cloud idles to sleep | Live ticker queries every 30s | [live.py](../src/cinetrace/web/live.py) |
+| ClickHouse Cloud idles to sleep | Live ticker queries every 30s. **Off until 21 Sep** so trial credits last; [wake-clickhouse.yml](../.github/workflows/wake-clickhouse.yml) turns it back on (also `workflow_dispatch`). | [live.py](../src/cinetrace/web/live.py) |
 | Running jobs age past the 6h zombie threshold | Live cohort rebuilt against a fresh `now()` every 15 min | `refresh_live_cohort` in [generate.py](../src/cinetrace/clickhouse/generate.py) |
 | Page shows an already-solved farm | Proposals and decisions cleared daily at `DEMO_RESET_HOUR_UTC` | [live.py](../src/cinetrace/web/live.py) |
 | `frame_samples` grows without bound | 100-day TTL | [010_frame_samples_ttl.sql](../src/cinetrace/schema/010_frame_samples_ttl.sql) |
@@ -43,8 +43,9 @@ query. Two knobs if spend runs hot:
 
 - Raise `LIVE_TICK_SECONDS` (30 → 120). The page updates less often; the
   cluster still never sleeps.
-- Set `LIVE_TICKER_ENABLED=false` and accept cold queries. Do not do this
-  during the judging window.
+- Set `LIVE_TICKER_ENABLED=false` and accept cold queries. This is the
+  current state (9 Sep) so the warehouse can idle. Do not leave it off
+  during the judging window — the 21 Sep wake job is what flips it back.
 
 Budget alerts to have in place before 9 Sep:
 
