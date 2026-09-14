@@ -34,6 +34,10 @@ DEFAULT_TICK_SECONDS = 30
 DEFAULT_REFRESH_SECONDS = 900
 ERROR_BACKOFF_SECONDS = 60
 MAX_SUBSCRIBERS = 40
+# Cloud Run fails a new revision if the process is not listen-ready during the
+# startup probe. The first-tick cohort rebuild is a mutations_sync
+# DELETE+reinsert — do it after the probe, not during.
+STARTUP_REFRESH_DELAY_SECONDS = 60
 
 SNAPSHOT = """
 SELECT
@@ -165,9 +169,11 @@ class LiveFarm:
     async def start(self) -> None:
         if self._task is not None or not ticker_enabled():
             return
-        # Refresh on the first tick so a container that has been down for days
-        # does not serve a stale live cohort.
-        self._last_refresh = 0.0
+        # Keep the first listen cheap. A container that has been down for days
+        # still rebuilds the live cohort, just after Cloud Run marks ready.
+        self._last_refresh = (
+            time.time() - self.refresh_seconds + STARTUP_REFRESH_DELAY_SECONDS
+        )
         self._task = asyncio.create_task(self._loop(), name="cinetrace-live-farm")
 
     async def stop(self) -> None:
