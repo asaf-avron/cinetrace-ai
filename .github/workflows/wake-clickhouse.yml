@@ -26,15 +26,31 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: false
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Describe current revision (no secrets)
+        run: |
+          gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='yaml(status.url,status.traffic,spec.template.metadata.annotations,spec.template.spec.containerConcurrency,spec.template.spec.timeoutSeconds,spec.template.spec.containers[0].resources,spec.template.spec.containers[0].startupProbe,spec.template.spec.containers[0].env.name)'
+
       - name: Enable live ticker
         run: |
+          # max-instances=1 + min-instances=1 leaves no slot for a new
+          # revision to pass its startup probe. Raise to 2 for the flip.
+          # cpu-boost / 2 vCPU give the new revision enough start CPU.
           gcloud run services update "${SERVICE}" \
             --project "${PROJECT_ID}" \
             --region "${REGION}" \
+            --max-instances=2 \
+            --cpu=2 \
+            --cpu-boost \
+            --no-cpu-throttling \
+            --memory=2Gi \
             --update-env-vars LIVE_TICKER_ENABLED=true \
             --quiet
 
@@ -53,3 +69,14 @@ jobs:
           assert live.get("enabled") is True, health
           print("ticker is on")
           '
+
+      - name: Dump recent Cloud Run logs on failure
+        if: failure()
+        run: |
+          echo "=== recent cinetrace revision logs (text only) ==="
+          gcloud logging read \
+            'resource.type="cloud_run_revision" AND resource.labels.service_name="cinetrace"' \
+            --project "${PROJECT_ID}" \
+            --limit 80 \
+            --freshness=30m \
+            --format='value(timestamp,severity,textPayload,jsonPayload.message)'
