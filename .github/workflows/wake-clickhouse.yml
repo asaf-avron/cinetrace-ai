@@ -74,11 +74,10 @@ jobs:
 
       - name: Dump recent Cloud Run logs on failure
         if: failure()
+        continue-on-error: true
         run: |
-          echo "=== recent cinetrace revision logs (text only) ==="
-          gcloud logging read \
-            'resource.type="cloud_run_revision" AND resource.labels.service_name="cinetrace"' \
+          echo "=== recent cinetrace service logs (no secrets) ==="
+          gcloud run services logs read "${SERVICE}" \
             --project "${PROJECT_ID}" \
-            --limit 80 \
-            --freshness=30m \
-            --format='value(timestamp,severity,textPayload,jsonPayload.message)'
+            --region "${REGION}" \
+            --limit 80
