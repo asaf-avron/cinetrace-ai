@@ -21,12 +21,14 @@ jobs:
   wake:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
-          create_credentials_file: false
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
